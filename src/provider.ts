@@ -58,6 +58,9 @@ export class MockProvider implements ModelProvider {
         fromMock: true,
       };
     }
+    if (intent === 'drillcheck') {
+      return { text: 'PARTLY\nMock check (Ollama is not answering): compare your answer with the concept card.', model, fromMock: true };
+    }
     if (intent === 'drill') {
       return { text: `Explain, in your own words, what \`${firstLine.slice(0, 60)}\` does and what breaks if it is removed.`, model, fromMock: true };
     }

@@ -1,40 +1,47 @@
 /**
- * Original monochrome geometric mark, loosely in the spirit of Lissitzky /
- * Malevich: overlapping wedge, circle, perpendicular bars and a solid square.
+ * Original monochrome geometric mark, in the spirit of Lissitzky / Malevich:
+ * a tall vertical composition — wedge, overlapping circle, perpendicular bars.
  * Theme-aware via currentColor. Not a copy of any artwork.
  */
-export const BANNER_SVG = `<svg class="bannerMark" viewBox="0 0 300 108" aria-hidden="true">
-  <circle cx="168" cy="54" r="40" fill="none" stroke="currentColor" stroke-width="3"/>
-  <path d="M18 96 L118 14 L196 96 Z" fill="currentColor" opacity="0.88"/>
-  <rect x="128" y="62" width="26" height="26" fill="var(--vscode-editor-background)" stroke="currentColor" stroke-width="2"/>
-  <path d="M232 6 L232 102 M262 6 L262 102 M214 84 L286 84" stroke="currentColor" stroke-width="5"/>
-  <path d="M36 96 L282 96" stroke="currentColor" stroke-width="2"/>
+export const BANNER_SVG = `<svg class="bannerMark" viewBox="0 0 120 150" aria-hidden="true">
+  <path d="M14 138 L60 18 L104 138 Z" fill="currentColor" opacity="0.9"/>
+  <circle cx="74" cy="62" r="30" fill="none" stroke="currentColor" stroke-width="3"/>
+  <rect x="42" y="96" width="20" height="20" fill="var(--vscode-editor-background)" stroke="currentColor" stroke-width="2"/>
+  <path d="M98 8 L98 142 M110 8 L110 142" stroke="currentColor" stroke-width="4"/>
+  <path d="M8 128 L112 128" stroke="currentColor" stroke-width="2"/>
 </svg>`;
 
-export const SHORTCUTS_HTML = `<details class="shortcuts">
+export const SHORTCUTS_HTML = `<details class="shortcuts bottomShortcuts">
   <summary>Commands &amp; shortcuts</summary>
   <ul>
     <li><strong>Explain in this sidebar</strong> — the Explain button (no shortcut needed)</li>
     <li><strong>Explain beside the editor</strong> — select code, then <code>Cmd+Shift+L</code> (or right-click → PIP)</li>
-    <li><strong>Clickable command list</strong> — Shortcuts button in the More drawer below</li>
+    <li><strong>Clickable command list</strong> — Shortcuts button in the More drawer</li>
   </ul>
 </details>`;
 
 export const LEARN_BODY = `
-  <div id="where" class="muted">Select code in the editor, then press Explain.</div>
   <div class="row primary">
     <button id="explainBtn">Explain selection</button>
     <button id="markBtn">Mark concept</button>
     <button id="speakBtn">Read aloud</button>
   </div>
+  <div class="row timer">
+    <label>Timebox (session only, never saved): <input id="timerMin" type="number" value="10" min="1" max="120"> min</label>
+    <button id="timerBtn">Start</button><span id="timerOut" class="muted"></span>
+  </div>
+
+  <section class="duckBox">
+    <input id="duckInput" type="text" placeholder="Rubber-duck it here — say what you think this code does… (Enter)">
+    <div id="duckLog"></div>
+  </section>
+
   <section id="hint" class="hint hidden"></section>
-  <section id="status" class="muted"></section>
   <section id="result"></section>
   <div id="trail" class="muted"></div>
-  <div id="nested"></div>
 
-  <section class="block" id="diagramBlock">
-    <h3>Diagrams</h3>
+  <details class="block" id="diagramBlock" open>
+    <summary><strong>Diagrams</strong> <span class="muted">(click a box for a one-line popup)</span></summary>
     <div class="row">
       <button class="diagramTypeBtn isActive" data-type="dataFlow">Data flow</button>
       <button class="diagramTypeBtn" data-type="architecture">Architecture</button>
@@ -46,17 +53,14 @@ export const LEARN_BODY = `
       <label><input type="checkbox" class="layerToggle" data-layer="params" checked> params</label>
       <label><input type="checkbox" class="layerToggle" data-layer="hooks" checked> hooks/state</label>
     </div>
-    <div id="diagram"><span class="muted">Explain something and its diagrams appear here — instantly, before the text. Click a box to dig into it.</span></div>
-  </section>
+    <div id="diagram"><span class="muted">Explain something and its diagrams appear here — instantly, before the text.</span></div>
+  </details>
 
-  <section class="ask block">
-    <input id="askInput" type="text" placeholder="Quick-fire question, or tell the duck what you think…">
-    <div class="row">
-      <button id="quickBtn">Quick-fire (1 sentence)</button>
-      <button id="duckBtn">Rubber-duck it</button>
-    </div>
-    <div id="askResult"></div>
-  </section>
+  <div id="wordPopup" class="wordPopup hidden">
+    <div class="wordPopupHead"><strong id="wordPopupTitle"></strong><button id="wordPopupClose" title="Close">x</button></div>
+    <div id="wordPopupBody"></div>
+    <input id="wordPopupInput" type="text" placeholder="Ask a follow-up — one-line answer… (Enter)">
+  </div>
 
   <details class="block" id="moreDrawer">
     <summary>More</summary>
@@ -65,10 +69,6 @@ export const LEARN_BODY = `
       <button id="openBesideBtn" class="iconBtn" title="Open the disposable panel beside the editor" aria-label="Open beside">&#8599;</button>
       <button id="helpBtn" class="iconBtn" title="Commands &amp; shortcuts list" aria-label="Shortcuts">&#9000;</button>
       <select id="voiceSelect" title="Voice for Read aloud"></select>
-    </div>
-    <div class="row timer">
-      <label>Timebox (session only, never saved): <input id="timerMin" type="number" value="10" min="1" max="120"> min</label>
-      <button id="timerBtn">Start</button><span id="timerOut" class="muted"></span>
     </div>
   </details>
   <footer id="stats" class="muted">Local models only · cost $0.00</footer>`;

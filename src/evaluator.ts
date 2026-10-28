@@ -75,6 +75,20 @@ export function evaluateQuickFire(raw: string): { text: string; repaired: boolea
   return { text: first, repaired: first !== flat };
 }
 
+export type DrillVerdict = 'CORRECT' | 'PARTLY' | 'WRONG';
+
+/** Parse the drill checker's two-line verdict. Anything unclear counts as PARTLY. */
+export function parseDrillVerdict(raw: string): { verdict: DrillVerdict; gap: string } {
+  const lines = raw.split('\n').map((l) => l.trim()).filter(Boolean);
+  const first = (lines[0] ?? '').toUpperCase();
+  const verdict: DrillVerdict = first.includes('CORRECT')
+    ? 'CORRECT'
+    : first.includes('WRONG')
+      ? 'WRONG'
+      : 'PARTLY';
+  return { verdict, gap: lines[1] ?? '' };
+}
+
 /** Rubber-duck contract (your /discuss skill): ends with exactly one question. */
 export function evaluateDuck(raw: string): { text: string; repaired: boolean } {
   const flat = raw.trim();

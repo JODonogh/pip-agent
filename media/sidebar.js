@@ -1,4 +1,4 @@
-/* Flashcards + Drill subsection. Posting goes through window.pipPost (set by learn.js). */
+/* Flashcards & Drill (one combined collapsible section in the sidebar). */
 const pipPost = (msg) => window.pipPost(msg);
 const cardsEl = document.getElementById('cards');
 const drillEl = document.getElementById('drill');
@@ -28,6 +28,39 @@ function card(concept) {
   return el;
 }
 
+function showDrill(msg) {
+  activeDrill = msg.id;
+  drillEl.replaceChildren();
+  const box = document.createElement('div');
+  box.className = 'card';
+  const q = document.createElement('div');
+  q.textContent = `Drill — ${msg.term}: ${msg.text}`;
+  const answer = document.createElement('textarea');
+  answer.id = 'drillAnswer';
+  answer.rows = 3;
+  answer.placeholder = 'Your answer, in your own words…';
+  const verdict = document.createElement('div');
+  verdict.id = 'drillVerdict';
+  const row = document.createElement('div');
+  row.className = 'row';
+  const check = document.createElement('button');
+  check.textContent = 'Check my answer';
+  check.onclick = () => {
+    verdict.textContent = 'Checking locally…';
+    pipPost({ type: 'drillAnswer', id: activeDrill, answer: answer.value });
+  };
+  const got = document.createElement('button');
+  got.textContent = 'Got it (self-grade)';
+  got.onclick = () => pipPost({ type: 'grade', id: activeDrill, gotIt: true });
+  const missed = document.createElement('button');
+  missed.textContent = 'Missed it (self-grade)';
+  missed.onclick = () => pipPost({ type: 'grade', id: activeDrill, gotIt: false });
+  row.append(check, got, missed);
+  box.append(q, answer, row, verdict);
+  drillEl.appendChild(box);
+  answer.focus();
+}
+
 window.addEventListener('message', (event) => {
   const msg = event.data;
   if (msg.type === 'concepts') {
@@ -40,26 +73,15 @@ window.addEventListener('message', (event) => {
     }
     msg.concepts.forEach((c) => cardsEl.appendChild(card(c)));
   } else if (msg.type === 'drillQuestion') {
-    activeDrill = msg.id;
-    drillEl.replaceChildren();
-    const q = document.createElement('div');
-    q.className = 'card';
-    q.textContent = `Drill — ${msg.term}: ${msg.text}`;
-    const row = document.createElement('div');
-    row.className = 'row';
-    const got = document.createElement('button');
-    got.textContent = 'Got it';
-    got.onclick = () => {
-      pipPost({ type: 'grade', id: activeDrill, gotIt: true });
-      drillEl.replaceChildren();
-    };
-    const missed = document.createElement('button');
-    missed.textContent = 'Missed it';
-    missed.onclick = () => {
-      pipPost({ type: 'grade', id: activeDrill, gotIt: false });
-      drillEl.replaceChildren();
-    };
-    row.append(got, missed);
-    drillEl.append(q, row);
+    showDrill(msg);
+  } else if (msg.type === 'drillVerdict') {
+    const verdict = document.getElementById('drillVerdict');
+    if (verdict) {
+      verdict.className = `verdict verdict-${msg.verdict.toLowerCase()}`;
+      verdict.textContent =
+        msg.verdict === 'CORRECT'
+          ? `Correct. ${msg.gap}`
+          : `${msg.verdict === 'WRONG' ? 'Not yet' : 'Partly there'}. ${msg.gap} (marked as a weak spot — it will resurface)`;
+    }
   }
 });

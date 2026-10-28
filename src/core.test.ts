@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { evaluateDuck, evaluateExplanation, evaluateQuickFire } from './evaluator';
+import { evaluateDuck, evaluateExplanation, evaluateQuickFire, parseDrillVerdict } from './evaluator';
+import { explainPrompt } from './workers';
 import { assertLocalhost } from './types';
 import { MockProvider, OllamaProvider } from './provider';
 import { bestHint, grade, hintScore, sortForReview } from './memory';
@@ -61,6 +62,26 @@ describe('evaluator', () => {
     );
     expect(res.fromMock).toBe(true);
     expect(evaluateExplanation(res.text).bottomLine).toContain('const x = 1;');
+  });
+});
+
+describe('no formulaic chunks + drill verdicts', () => {
+  it('explainer prompt bans the generic chunk titles', () => {
+    const prompt = explainPrompt({
+      file: 'A.java',
+      line: 1,
+      language: 'java',
+      selection: 'class A {}',
+      surrounding: '',
+    });
+    const text = prompt.map((m) => m.content).join('\n');
+    expect(text).toContain('NEVER use generic titles');
+    expect(text).not.toContain('titles like: What it is');
+  });
+  it('parses drill verdicts, defaulting unclear to PARTLY', () => {
+    expect(parseDrillVerdict('CORRECT\nYou nailed the capture part.').verdict).toBe('CORRECT');
+    expect(parseDrillVerdict('WRONG\nNot quite.').verdict).toBe('WRONG');
+    expect(parseDrillVerdict('some rambling').verdict).toBe('PARTLY');
   });
 });
 

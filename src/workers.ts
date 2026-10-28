@@ -24,7 +24,9 @@ export function explainPrompt(ctx: CodeContext, focus?: string): ChatMessage[] {
         'Reply in EXACTLY this format:\n' +
         'BOTTOM_LINE: <one sentence>\n' +
         '### <chunk title>\n<at most 50 words>\n' +
-        'Use 2-4 chunks with titles like: What it is / How it flows / Worth learning / Watch out.\n' +
+        'Use 2-4 chunks. Chunk titles MUST name the actual parts of THIS code (e.g. "The 401 response", ' +
+        '"When this fires", "The exception type"). NEVER use generic titles: What it is, How it flows, ' +
+        'Worth learning, Watch out, Overview, Summary, Conclusion.\n' +
         codeBlock(ctx),
     },
   ];
@@ -52,6 +54,33 @@ export function duckPrompt(ctx: CodeContext, statement: string): ChatMessage[] {
     {
       role: 'user',
       content: `[INTENT:duck]\nThe engineer says: "${statement}"\nAbout this code:\n${codeBlock(ctx)}`,
+    },
+  ];
+}
+
+/** Word-popup: one rapid, succinct line about one term in this code. */
+export function popupPrompt(ctx: CodeContext, word: string, question?: string): ChatMessage[] {
+  return [
+    { role: 'system', content: BASE_RULES },
+    {
+      role: 'user',
+      content:
+        `[INTENT:quickfire]\nIn EXACTLY one short sentence, ${question ? `answer "${question}" about` : 'explain'} "${word}" ` +
+        `as it is used in this code. No preamble.\n${codeBlock(ctx)}`,
+    },
+  ];
+}
+
+export function drillCheckPrompt(concept: Concept, answer: string): ChatMessage[] {
+  return [
+    { role: 'system', content: BASE_RULES },
+    {
+      role: 'user',
+      content:
+        `[INTENT:drillcheck]\nConcept: "${concept.term}". Correct understanding: "${concept.bottomLine}". ` +
+        `The engineer answered: "${answer}". Reply with TWO lines only:\n` +
+        'Line 1: CORRECT, PARTLY, or WRONG\n' +
+        'Line 2: one sentence naming the gap or confirming the key point.',
     },
   ];
 }

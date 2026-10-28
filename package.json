@@ -2,7 +2,7 @@
   "name": "agent-pip",
   "displayName": "Agent PIP — Learn",
   "description": "Engineer-led learning beside your code. Local Ollama models only — nothing leaves this machine.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "local-poc",
   "license": "UNLICENSED",
   "engines": { "vscode": "^1.90.0" },

@@ -6,8 +6,42 @@ body {
   padding: 12px;
   line-height: 1.45;
 }
-.banner { display: block; }
-.bannerMark { width: 100%; max-width: 320px; height: auto; display: block; }
+.banner { display: block; text-align: left; }
+.bannerMark { width: 96px; height: auto; display: block; }
+.wordPopup {
+  position: fixed;
+  width: 320px;
+  max-width: 92vw;
+  z-index: 50;
+  background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+  color: var(--vscode-foreground);
+  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+  padding: 10px;
+}
+.wordPopupHead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.wordPopupHead button { padding: 1px 8px; }
+.wordPopup input { width: 100%; box-sizing: border-box; margin-top: 8px; }
+.duckBox { margin: 10px 0; }
+.duckBox input { width: 100%; box-sizing: border-box; }
+.duckBox .answer { margin-top: 6px; }
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin: 8px 0;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 4px;
+  padding: 6px;
+  font-family: inherit;
+}
+.verdict { margin-top: 6px; font-weight: 600; }
+.verdict-correct { color: var(--vscode-charts-green, inherit); }
+.verdict-wrong { color: var(--vscode-errorForeground); }
+.verdict-partly { color: var(--vscode-editorWarning-foreground); }
+.bottomShortcuts { margin-top: 18px; }
 .banner h2 { font-size: 1.05em; margin: 4px 0 8px; font-weight: 600; }
 .primary button { font-weight: 600; }
 .iconBtn { font-size: 15px; line-height: 1; padding: 5px 9px; }

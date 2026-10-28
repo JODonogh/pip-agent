@@ -37,8 +37,8 @@ export class LearnPanel {
 <link href="${style}" rel="stylesheet"></head>
 <body>
   <header class="banner">${BANNER_SVG}<h2>Agent PIP — Learn</h2></header>
-  ${SHORTCUTS_HTML}
   ${LEARN_BODY}
+  ${SHORTCUTS_HTML}
   <script nonce="${nonce}" src="${script}"></script>
 </body></html>`;
     panel.onDidDispose(() => {

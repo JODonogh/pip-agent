@@ -3,11 +3,11 @@ import { LearnPanel } from './panel';
 import { SidebarProvider } from './sidebar';
 import { PipStore } from './store';
 import { MockProvider, OllamaProvider } from './provider';
-import { evaluateDuck, evaluateExplanation, evaluateQuickFire, MAX_DEPTH } from './evaluator';
+import { evaluateDuck, evaluateExplanation, evaluateQuickFire, MAX_DEPTH, parseDrillVerdict } from './evaluator';
 import { bestHint, grade } from './memory';
 import { extractKeywords } from './keywords';
 import { analyzeDiagrams } from './diagram';
-import { drillPrompt, duckPrompt, explainPrompt, quickFirePrompt } from './workers';
+import { drillCheckPrompt, drillPrompt, duckPrompt, explainPrompt, popupPrompt, quickFirePrompt } from './workers';
 import { estimateTokens, type ChatMessage, type CodeContext, type Concept, type Explanation, type ProviderResult } from './types';
 import { execFile, type ChildProcess } from 'node:child_process';
 
@@ -21,6 +21,8 @@ const TOKEN_CAPS: Record<string, number> = {
   'quick-fire': 60,
   'rubber-duck': 120,
   drillmaster: 90,
+  'drill-check': 90,
+  popup: 70,
 };
 
 /**
@@ -36,7 +38,14 @@ export function activate(context: vscode.ExtensionContext): void {
   let lastTerm = '';
 
   const explainCache = new Map<string, Explanation>();
+  const popupCache = new Map<string, string>();
   let speechProcess: ChildProcess | null = null;
+
+  const stopSpeech = (): void => {
+    speechProcess?.kill('SIGKILL');
+    speechProcess = null;
+    execFile('pkill', ['-x', 'say'], () => undefined);
+  };
 
   const runWorker = async (
     worker: string,
@@ -149,19 +158,40 @@ export function activate(context: vscode.ExtensionContext): void {
         case 'help':
           await vscode.commands.executeCommand('pip.showCommands');
           break;
+        case 'stopSpeak':
+          stopSpeech();
+          break;
         case 'speak': {
-          // macOS `say` with the real system voices (Flo/Eddy/Reed beat Samantha).
-          // Download a Premium voice in Settings for the least robotic result.
+          // One voice at a time: kill anything speaking before starting.
           const text = String(message['text'] ?? '').slice(0, 600);
           const voice = String(message['voice'] ?? '').trim();
           if (process.platform === 'darwin' && text) {
-            speechProcess?.kill();
+            stopSpeech();
             const args = voice ? ['-v', voice, '-r', '178', text] : ['-r', '178', text];
             speechProcess = execFile('say', args, () => {
               speechProcess = null;
             });
-            transport.post({ type: 'status', text: `Reading aloud${voice ? ` (${voice})` : ''} — pick a voice in More.` });
           }
+          break;
+        }
+        case 'popupExplain':
+        case 'popupAsk': {
+          if (!codeContext) {
+            break;
+          }
+          const word = String(message['word'] ?? '');
+          const question = message['type'] === 'popupAsk' ? String(message['question'] ?? '') : undefined;
+          const cacheKey = `${codeContext.file}:${codeContext.line}:${word}:${question ?? ''}`;
+          const hit = popupCache.get(cacheKey);
+          if (hit) {
+            transport.post({ type: 'popupAnswer', word, text: hit });
+            break;
+          }
+          const result = await runWorker('popup', 'pip.fastModel', popupPrompt(codeContext, word, question));
+          const text = evaluateQuickFire(result.text).text;
+          popupCache.set(cacheKey, text);
+          transport.post({ type: 'popupAnswer', word, text });
+          transport.post(statLine(result, 'popup'));
           break;
         }
         case 'explainSelection': {
@@ -256,10 +286,20 @@ export function activate(context: vscode.ExtensionContext): void {
 
   sidebar.onMessage((message) => {
     void (async () => {
-      if (['grade', 'delete', 'drill'].includes(String(message['type']))) {
+      if (['grade', 'delete', 'drill', 'drillAnswer'].includes(String(message['type']))) {
         const concepts = store.concepts();
         const concept = concepts.find((c) => c.id === String(message['id'] ?? ''));
-        if (message['type'] === 'grade' && concept) {
+        if (message['type'] === 'drillAnswer' && concept) {
+          const result = await runWorker(
+            'drill-check',
+            'pip.fastModel',
+            drillCheckPrompt(concept, String(message['answer'] ?? '')),
+          );
+          const { verdict, gap } = parseDrillVerdict(result.text);
+          await store.upsertConcept(grade(concept, verdict === 'CORRECT', Date.now()));
+          sidebar.post({ type: 'drillVerdict', id: concept.id, verdict, gap });
+          sidebar.refresh();
+        } else if (message['type'] === 'grade' && concept) {
           await store.upsertConcept(grade(concept, message['gotIt'] === true, Date.now()));
           sidebar.refresh();
         } else if (message['type'] === 'delete' && concept) {

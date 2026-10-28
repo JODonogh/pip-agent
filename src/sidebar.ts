@@ -41,20 +41,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 <link href="${style}" rel="stylesheet"></head>
 <body>
   <header class="banner">${BANNER_SVG}<h2>Agent PIP</h2></header>
-  ${SHORTCUTS_HTML}
   ${LEARN_BODY}
 
-  <section class="block">
-    <h3>Drill</h3>
-    <p class="muted">Pick a flashcard below → Drill me. Say it in your own words, then grade honestly.</p>
+  <details class="block" id="cardsBlock" open>
+    <summary><strong>Flashcards &amp; Drill</strong> <span class="muted">— weak spots first</span></summary>
+    <p class="muted">Drill me → answer in your own words → Check. Wrong = weak spot, two right = mastered.</p>
     <div id="drill"></div>
-  </section>
-
-  <section class="block">
-    <h3>Flashcards</h3>
-    <p class="muted">Weak spots first. Marked concepts from the panel land here.</p>
     <div id="cards"></div>
-  </section>
+  </details>
+  ${SHORTCUTS_HTML}
 
   <script nonce="${nonce}" src="${learn}"></script>
   <script nonce="${nonce}" src="${cards}"></script>
