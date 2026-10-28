@@ -6,9 +6,10 @@ import { MockProvider, OllamaProvider } from './provider';
 import { evaluateDuck, evaluateExplanation, evaluateQuickFire, MAX_DEPTH } from './evaluator';
 import { bestHint, grade } from './memory';
 import { extractKeywords } from './keywords';
-import { analyzeCode } from './diagram';
+import { analyzeDiagrams } from './diagram';
 import { drillPrompt, duckPrompt, explainPrompt, quickFirePrompt } from './workers';
-import { estimateTokens, type ChatMessage, type CodeContext, type Concept, type ProviderResult } from './types';
+import { estimateTokens, type ChatMessage, type CodeContext, type Concept, type Explanation, type ProviderResult } from './types';
+import { execFile, type ChildProcess } from 'node:child_process';
 
 interface Transport {
   post(message: Record<string, unknown>): void;
@@ -16,6 +17,7 @@ interface Transport {
 
 const TOKEN_CAPS: Record<string, number> = {
   explainer: 380,
+  'explainer-nested': 180,
   'quick-fire': 60,
   'rubber-duck': 120,
   drillmaster: 90,
@@ -32,6 +34,9 @@ export function activate(context: vscode.ExtensionContext): void {
   let codeContext: CodeContext | null = null;
   let lastBottomLine = '';
   let lastTerm = '';
+
+  const explainCache = new Map<string, Explanation>();
+  let speechProcess: ChildProcess | null = null;
 
   const runWorker = async (
     worker: string,
@@ -95,11 +100,31 @@ export function activate(context: vscode.ExtensionContext): void {
       transport.post({ type: 'status', text: 'Select code in the editor first.' });
       return;
     }
-    transport.post({ type: 'status', text: 'Thinking locally… (diagram below is instant)' });
-    // The diagram is deterministic — send it now, don't make it wait for the LLM.
-    transport.post({ type: 'diagram', diagram: analyzeCode(codeContext) });
-    const result = await runWorker('explainer', 'pip.model', explainPrompt(codeContext, focus));
+    transport.post({ type: 'status', text: 'Thinking locally… (diagrams below are instant)' });
+    // The diagrams are deterministic — send them now, don't make them wait for the LLM.
+    transport.post({ type: 'diagrams', diagrams: analyzeDiagrams(codeContext) });
+    const cacheKey = `${codeContext.file}:${codeContext.line}:${focus ?? ''}:${codeContext.selection.length}`;
+    const cached = explainCache.get(cacheKey);
+    if (cached) {
+      transport.post({
+        type: 'explanation',
+        explanation: cached,
+        focus: focus ?? null,
+        depth,
+        hint: null,
+        keywords: extractKeywords(cached.bottomLine),
+        diagrams: analyzeDiagrams(codeContext),
+      });
+      transport.post({ type: 'stat', text: 'explainer · cached (instant) · $0.00 local' });
+      return;
+    }
+    // Nested digs take the fast route with a tight cap — ~2-3s, not a full re-explain.
+    const result =
+      depth > 0
+        ? await runWorker('explainer-nested', 'pip.fastModel', explainPrompt(codeContext, focus))
+        : await runWorker('explainer', 'pip.model', explainPrompt(codeContext, focus));
     const explanation = evaluateExplanation(result.text);
+    explainCache.set(cacheKey, explanation);
     lastBottomLine = explanation.bottomLine;
     lastTerm = focus ?? codeContext.selection.split('\n')[0]?.trim().slice(0, 60) ?? 'concept';
     const hint = focus ? null : bestHint(store.concepts(), codeContext.selection, Date.now());
@@ -111,7 +136,7 @@ export function activate(context: vscode.ExtensionContext): void {
       depth,
       hint,
       keywords: extractKeywords(fullText),
-      diagram: analyzeCode(codeContext),
+      diagrams: analyzeDiagrams(codeContext),
     });
     transport.post(statLine(result, 'explainer'));
     await store.addHistory(focus ?? codeContext.selection.slice(0, 120));
@@ -124,6 +149,21 @@ export function activate(context: vscode.ExtensionContext): void {
         case 'help':
           await vscode.commands.executeCommand('pip.showCommands');
           break;
+        case 'speak': {
+          // macOS `say` with the real system voices (Flo/Eddy/Reed beat Samantha).
+          // Download a Premium voice in Settings for the least robotic result.
+          const text = String(message['text'] ?? '').slice(0, 600);
+          const voice = String(message['voice'] ?? '').trim();
+          if (process.platform === 'darwin' && text) {
+            speechProcess?.kill();
+            const args = voice ? ['-v', voice, '-r', '178', text] : ['-r', '178', text];
+            speechProcess = execFile('say', args, () => {
+              speechProcess = null;
+            });
+            transport.post({ type: 'status', text: `Reading aloud${voice ? ` (${voice})` : ''} — pick a voice in More.` });
+          }
+          break;
+        }
         case 'explainSelection': {
           const captured = captureContext();
           if (captured) {

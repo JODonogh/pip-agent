@@ -5,7 +5,7 @@ import type { CodeContext } from './types';
  * Turns a selection into a small flow graph you can toggle layer by layer.
  */
 
-export type NodeKind = 'endpoint' | 'method' | 'call' | 'param' | 'return' | 'import' | 'hook' | 'state';
+export type NodeKind = 'endpoint' | 'method' | 'call' | 'param' | 'return' | 'import' | 'hook' | 'state' | 'branch' | 'assert';
 
 export interface DiagramNode {
   id: string;
@@ -34,6 +34,8 @@ export const LAYER_OF_KIND: Record<NodeKind, string> = {
   param: 'params',
   hook: 'hooks',
   state: 'hooks',
+  branch: 'core',
+  assert: 'core',
 };
 
 const uniq = <T,>(items: T[]): T[] => [...new Set(items)];
@@ -110,6 +112,12 @@ export function analyzeCode(ctx: CodeContext): Diagram {
     add({ id: `call:${call}`, label: call, detail: `calls ${call}`, kind: 'call' }, methodId);
   }
 
+  // Branches — the decision points a reader (and a test) must reason about
+  for (const match of code.matchAll(/\b(if|else if|switch|try|catch)\s*(\([^)]*\))?/g)) {
+    const label = `${match[1]}${match[2] ? ` ${match[2].slice(0, 30)}` : ''}`;
+    add({ id: `branch:${label}`, label, detail: `branch ${label}`, kind: 'branch' }, methodId);
+  }
+
   // Return value
   const returnMatch = /return\s+([^;]+);?/.exec(code);
   if (returnMatch) {
@@ -118,4 +126,59 @@ export function analyzeCode(ctx: CodeContext): Diagram {
   }
 
   return { nodes, edges, language: ctx.language };
+}
+
+export interface Diagrams {
+  dataFlow: Diagram;
+  architecture: Diagram;
+  testing: Diagram;
+}
+
+/** Three views of the same selection: flow, architecture, and how you would test it. */
+export function analyzeDiagrams(ctx: CodeContext): Diagrams {
+  const flow = analyzeCode(ctx);
+  const byKind = (kinds: NodeKind[]) => flow.nodes.filter((n) => kinds.includes(n.kind));
+
+  const architecture: Diagram = {
+    language: ctx.language,
+    nodes: byKind(['endpoint', 'method', 'import']),
+    edges: [],
+  };
+
+  // Testing flow: Arrange (params) → Act (method) → branches → Assert (assertions or return)
+  const testingNodes: DiagramNode[] = [];
+  const params = byKind(['param']);
+  if (params.length > 0) {
+    testingNodes.push({
+      id: 'test:arrange',
+      label: `Arrange: ${params.map((p) => p.label).join(', ')}`,
+      detail: 'test inputs / arrange step',
+      kind: 'param',
+    });
+  }
+  for (const node of byKind(['method', 'endpoint'])) {
+    testingNodes.push({ ...node, id: `test:${node.id}`, label: `Act: ${node.label}` });
+  }
+  for (const node of byKind(['branch'])) {
+    testingNodes.push({ ...node, id: `test:${node.id}`, label: `Test both sides: ${node.label}` });
+  }
+  const assertCalls = uniq(
+    [...ctx.selection.matchAll(/\b(assert\w*|expect|verify|should\w*)\s*\(/g)].map((m) => `${m[1]}()`),
+  );
+  if (assertCalls.length > 0) {
+    for (const call of assertCalls.slice(0, 4)) {
+      testingNodes.push({ id: `test:assert:${call}`, label: `Assert: ${call}`, detail: `assertion ${call}`, kind: 'assert' });
+    }
+  } else {
+    const ret = byKind(['return'])[0];
+    testingNodes.push({
+      id: 'test:assert:return',
+      label: ret ? `Assert on: ${ret.label}` : 'Assert on the outcome',
+      detail: 'what to assert in a test',
+      kind: 'assert',
+    });
+  }
+  const testing: Diagram = { language: ctx.language, nodes: testingNodes, edges: [] };
+
+  return { dataFlow: flow, architecture, testing };
 }

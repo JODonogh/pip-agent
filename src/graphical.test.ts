@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { extractKeywords, isKeyword } from './keywords';
-import { analyzeCode, LAYER_OF_KIND } from './diagram';
+import { analyzeCode, analyzeDiagrams, LAYER_OF_KIND } from './diagram';
 import { PipStore } from './store';
 import type { CodeContext, Concept } from './types';
 
@@ -60,6 +60,21 @@ describe('diagram analyser (Systematic/Graphical)', () => {
     expect(d.nodes.some((n) => n.kind === 'call' && n.label.includes('findAll'))).toBe(true);
     expect(kinds).toContain('return');
     expect(d.edges.some((e) => e.to.startsWith('method:'))).toBe(true);
+  });
+  it('produces three views: data flow, architecture, testing', () => {
+    const all = analyzeDiagrams(springCtx);
+    expect(all.dataFlow.nodes.some((n) => n.kind === 'call')).toBe(true);
+    expect(all.architecture.nodes.every((n) => ['endpoint', 'method', 'import'].includes(n.kind))).toBe(true);
+    expect(all.testing.nodes.some((n) => n.kind === 'assert')).toBe(true);
+    expect(all.testing.nodes.some((n) => n.label.startsWith('Act:'))).toBe(true);
+  });
+  it('testing flow surfaces branches to test both sides of', () => {
+    const branchy: CodeContext = {
+      ...springCtx,
+      selection: 'public int f(int x) { if (x > 0) { return x; } try { work(); } catch (Exception e) { return -1; } }',
+    };
+    const all = analyzeDiagrams(branchy);
+    expect(all.testing.nodes.some((n) => n.kind === 'branch')).toBe(true);
   });
   it('maps a React component: import, hook, state layers', () => {
     const d = analyzeCode(reactCtx);

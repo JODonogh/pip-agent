@@ -6,9 +6,24 @@ body {
   padding: 12px;
   line-height: 1.45;
 }
-.banner { display: flex; align-items: center; gap: 10px; }
-.bannerMark { width: 84px; height: 28px; flex: none; }
-.banner h2 { font-size: 1.05em; margin: 0; font-weight: 600; }
+.banner { display: block; }
+.bannerMark { width: 100%; max-width: 320px; height: auto; display: block; }
+.banner h2 { font-size: 1.05em; margin: 4px 0 8px; font-weight: 600; }
+.primary button { font-weight: 600; }
+.iconBtn { font-size: 15px; line-height: 1; padding: 5px 9px; }
+.nestedCard {
+  border-left: 3px solid var(--vscode-foreground);
+  border-top: 1px solid var(--vscode-panel-border);
+  border-right: 1px solid var(--vscode-panel-border);
+  border-bottom: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 10px 0;
+}
+.diagramTypeBtn.isActive {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
 h3 { font-size: 1em; margin: 6px 0; }
 button {
   background: var(--vscode-button-secondaryBackground);
