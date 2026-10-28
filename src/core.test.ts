@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { evaluateDuck, evaluateExplanation, evaluateQuickFire, parseDrillVerdict } from './evaluator';
+import { evaluateDuck, evaluateExplanation, evaluateQuickFire, firstAppFrame, parseDrillVerdict, parseSolver } from './evaluator';
 import { explainPrompt } from './workers';
 import { assertLocalhost } from './types';
 import { MockProvider, OllamaProvider } from './provider';
@@ -82,6 +82,26 @@ describe('no formulaic chunks + drill verdicts', () => {
     expect(parseDrillVerdict('CORRECT\nYou nailed the capture part.').verdict).toBe('CORRECT');
     expect(parseDrillVerdict('WRONG\nNot quite.').verdict).toBe('WRONG');
     expect(parseDrillVerdict('some rambling').verdict).toBe('PARTLY');
+  });
+});
+
+describe('solver', () => {
+  it('parses the 4-part solver reply', () => {
+    const reply = parseSolver(
+      'RESTATE: The endpoint 500s on empty carts.\nCAUSE: total is null (confidence: likely)\nCHECK: Log cart.total before the reduce.\nQUESTION: Does it fail for every cart?',
+    );
+    expect(reply.restate).toContain('500s');
+    expect(reply.cause).toBe('total is null');
+    expect(reply.confidence).toBe('likely');
+    expect(reply.check).toContain('Log');
+  });
+  it('extracts the first application frame, skipping JDK frames', () => {
+    const trace = [
+      'java.lang.NullPointerException: boom',
+      '\tat java.base/java.util.Objects.requireNonNull(Objects.java:209)',
+      '\tat com.workday.portal.CartService.total(CartService.java:42)',
+    ].join('\n');
+    expect(firstAppFrame(trace)).toContain('CartService.java:42');
   });
 });
 

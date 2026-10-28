@@ -35,6 +35,62 @@ export class OllamaProvider implements ModelProvider {
     }
     return { text, model, fromMock: false };
   }
+
+  /** Streaming variant: onText receives the accumulated text as tokens arrive. */
+  async chatStream(
+    messages: readonly ChatMessage[],
+    model: string,
+    maxTokens: number,
+    onText: (accumulated: string) => void,
+  ): Promise<ProviderResult> {
+    const url = new URL('/api/chat', this.base);
+    const res = await this.fetchFn(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        stream: true,
+        keep_alive: '30m',
+        options: { temperature: 0.2, num_predict: maxTokens, num_ctx: 4096 },
+        messages: messages.map((m) => ({ role: m.role, content: m.content })),
+      }),
+    });
+    if (!res.ok || !res.body) {
+      throw new Error(`Ollama stream failed: ${res.status}`);
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let accumulated = '';
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() ?? '';
+      for (const line of lines) {
+        if (!line.trim()) {
+          continue;
+        }
+        try {
+          const parsed = JSON.parse(line) as { message?: { content?: string } };
+          const piece = parsed.message?.content ?? '';
+          if (piece) {
+            accumulated += piece;
+            onText(accumulated);
+          }
+        } catch {
+          // Partial JSON line — wait for more bytes.
+        }
+      }
+    }
+    if (!accumulated.trim()) {
+      throw new Error('Ollama streamed an empty response');
+    }
+    return { text: accumulated.trim(), model, fromMock: false };
+  }
 }
 
 /**
@@ -54,6 +110,18 @@ export class MockProvider implements ModelProvider {
     if (intent === 'duck') {
       return {
         text: 'That holds only if the selection really is where the state changes, not just where it is passed through.\nWhat would you expect to see if this line never ran?',
+        model,
+        fromMock: true,
+      };
+    }
+    if (intent === 'solver') {
+      return {
+        text: [
+          'RESTATE: Mock solver (Ollama is not answering) — something in the selected code misbehaves.',
+          'CAUSE: The value is created somewhere other than where you are looking (confidence: possible)',
+          'CHECK: Put a breakpoint or log line where the value is created, not where it is used.',
+          'QUESTION: What is the exact error message or wrong output?',
+        ].join('\n'),
         model,
         fromMock: true,
       };

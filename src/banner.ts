@@ -3,12 +3,13 @@
  * a tall vertical composition — wedge, overlapping circle, perpendicular bars.
  * Theme-aware via currentColor. Not a copy of any artwork.
  */
-export const BANNER_SVG = `<svg class="bannerMark" viewBox="0 0 120 150" aria-hidden="true">
-  <path d="M14 138 L60 18 L104 138 Z" fill="currentColor" opacity="0.9"/>
-  <circle cx="74" cy="62" r="30" fill="none" stroke="currentColor" stroke-width="3"/>
-  <rect x="42" y="96" width="20" height="20" fill="var(--vscode-editor-background)" stroke="currentColor" stroke-width="2"/>
-  <path d="M98 8 L98 142 M110 8 L110 142" stroke="currentColor" stroke-width="4"/>
-  <path d="M8 128 L112 128" stroke="currentColor" stroke-width="2"/>
+export const BANNER_SVG = `<svg class="bannerMark" viewBox="0 0 200 170" aria-hidden="true">
+  <polygon points="30,150 118,14 142,14 66,150" fill="#2456a6"/>
+  <polygon points="118,158 168,62 188,74 148,164" fill="#f2c230"/>
+  <polygon points="8,66 26,52 196,128 186,150" fill="#d43a2f"/>
+  <polygon points="18,14 28,10 188,158 178,164" fill="currentColor"/>
+  <polygon points="136,8 148,6 52,162 42,158" fill="currentColor"/>
+  <polygon points="82,92 112,44 128,52 102,104" fill="#7fb2d9"/>
 </svg>`;
 
 export const SHORTCUTS_HTML = `<details class="shortcuts bottomShortcuts">
@@ -27,7 +28,7 @@ export const LEARN_BODY = `
     <button id="speakBtn">Read aloud</button>
   </div>
   <div class="row timer">
-    <label>Timebox (session only, never saved): <input id="timerMin" type="number" value="10" min="1" max="120"> min</label>
+    <label>Timebox <input id="timerMin" type="number" value="10" min="1" max="120" title="Minutes (session only, never saved)"> min</label>
     <button id="timerBtn">Start</button><span id="timerOut" class="muted"></span>
   </div>
 
@@ -54,6 +55,18 @@ export const LEARN_BODY = `
       <label><input type="checkbox" class="layerToggle" data-layer="hooks" checked> hooks/state</label>
     </div>
     <div id="diagram"><span class="muted">Explain something and its diagrams appear here — instantly, before the text.</span></div>
+  </details>
+
+  <details class="block" id="solverBlock" open>
+    <summary><strong>Solver</strong> <span class="muted">— work a bug together, one check at a time</span></summary>
+    <input id="solverProblem" type="text" placeholder="Problem: what is broken or puzzling?">
+    <textarea id="solverError" rows="3" placeholder="Optional: paste an error / stack trace / log lines…"></textarea>
+    <div class="row">
+      <button id="solveBtn">Solve with me</button>
+      <button id="solveNextBtn" class="hiddenBtn" title="That check did not work — next hypothesis">Didn't work — next</button>
+      <button id="solveFixedBtn" class="hiddenBtn" title="Close this problem">Fixed it</button>
+    </div>
+    <div id="solverResult"></div>
   </details>
 
   <div id="wordPopup" class="wordPopup hidden">

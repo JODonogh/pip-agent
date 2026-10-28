@@ -3,11 +3,11 @@ import { LearnPanel } from './panel';
 import { SidebarProvider } from './sidebar';
 import { PipStore } from './store';
 import { MockProvider, OllamaProvider } from './provider';
-import { evaluateDuck, evaluateExplanation, evaluateQuickFire, MAX_DEPTH, parseDrillVerdict } from './evaluator';
+import { evaluateDuck, evaluateExplanation, evaluateQuickFire, firstAppFrame, MAX_DEPTH, parseDrillVerdict, parseSolver } from './evaluator';
 import { bestHint, grade } from './memory';
 import { extractKeywords } from './keywords';
 import { analyzeDiagrams } from './diagram';
-import { drillCheckPrompt, drillPrompt, duckPrompt, explainPrompt, popupPrompt, quickFirePrompt } from './workers';
+import { drillCheckPrompt, drillPrompt, duckPrompt, explainPrompt, popupPrompt, quickFirePrompt, solverPrompt } from './workers';
 import { estimateTokens, type ChatMessage, type CodeContext, type Concept, type Explanation, type ProviderResult } from './types';
 import { execFile, type ChildProcess } from 'node:child_process';
 
@@ -23,6 +23,7 @@ const TOKEN_CAPS: Record<string, number> = {
   drillmaster: 90,
   'drill-check': 90,
   popup: 70,
+  solver: 220,
 };
 
 /**
@@ -41,11 +42,15 @@ export function activate(context: vscode.ExtensionContext): void {
   const popupCache = new Map<string, string>();
   let speechProcess: ChildProcess | null = null;
 
-  const stopSpeech = (): void => {
+  // Awaited: the old fire-and-forget pkill raced and killed the NEW utterance.
+  const stopSpeech = async (): Promise<void> => {
     speechProcess?.kill('SIGKILL');
     speechProcess = null;
-    execFile('pkill', ['-x', 'say'], () => undefined);
+    await new Promise<void>((resolve) => execFile('pkill', ['-x', 'say'], () => resolve()));
   };
+  let solverTried: string[] = [];
+  let solverProblem = '';
+  let lastSolverCause = '';
 
   const runWorker = async (
     worker: string,
@@ -127,8 +132,36 @@ export function activate(context: vscode.ExtensionContext): void {
       transport.post({ type: 'stat', text: 'explainer · cached (instant) · $0.00 local' });
       return;
     }
-    // Nested digs take the fast route with a tight cap — ~2-3s, not a full re-explain.
-    const result =
+    // Stream the main explain so the first words land in ~1s, not after full generation.
+    let result: (ProviderResult & { latencyMs: number }) | null = null;
+    if (depth === 0) {
+      const config = vscode.workspace.getConfiguration();
+      const started = Date.now();
+      let lastSent = 0;
+      try {
+        const streamed = await new OllamaProvider(
+          config.get<string>('pip.ollamaUrl', 'http://127.0.0.1:11434'),
+        ).chatStream(explainPrompt(codeContext, focus), config.get<string>('pip.model', 'mistral:latest'), 320, (acc) => {
+          if (Date.now() - lastSent > 250) {
+            lastSent = Date.now();
+            transport.post({ type: 'streamPartial', text: acc });
+          }
+        });
+        result = { ...streamed, latencyMs: Date.now() - started };
+        await store.addStat({
+          worker: 'explainer',
+          model: streamed.model,
+          latencyMs: result.latencyMs,
+          estTokens: estimateTokens(streamed.text),
+          costUsd: 0,
+          fromMock: false,
+          at: Date.now(),
+        });
+      } catch {
+        result = null; // fall through to the non-streaming path (which falls back to Mock)
+      }
+    }
+    result ??=
       depth > 0
         ? await runWorker('explainer-nested', 'pip.fastModel', explainPrompt(codeContext, focus))
         : await runWorker('explainer', 'pip.model', explainPrompt(codeContext, focus));
@@ -159,21 +192,69 @@ export function activate(context: vscode.ExtensionContext): void {
           await vscode.commands.executeCommand('pip.showCommands');
           break;
         case 'stopSpeak':
-          stopSpeech();
+          await stopSpeech();
           break;
+        case 'getVoices': {
+          // Canonical macOS voice names, straight from `say` (webview names differ and fail).
+          execFile('say', ['-v', '?'], (err, stdout) => {
+            if (err) {
+              return;
+            }
+            const voices = stdout
+              .split('\n')
+              .map((line) => /^(.+?)\s{2,}([a-z]{2}[_-][A-Z]{2})/.exec(line.trim()))
+              .filter((m) => m && (m[2] ?? '').startsWith('en'))
+              .map((m) => (m?.[1] ?? '').trim())
+              .filter(Boolean);
+            transport.post({ type: 'voices', voices });
+          });
+          break;
+        }
         case 'speak': {
-          // One voice at a time: kill anything speaking before starting.
+          // One voice at a time: fully stop the old one BEFORE starting the new one.
           const text = String(message['text'] ?? '').slice(0, 600);
           const voice = String(message['voice'] ?? '').trim();
           if (process.platform === 'darwin' && text) {
-            stopSpeech();
+            await stopSpeech();
             const args = voice ? ['-v', voice, '-r', '178', text] : ['-r', '178', text];
-            speechProcess = execFile('say', args, () => {
+            speechProcess = execFile('say', args, (err) => {
               speechProcess = null;
+              if (err && voice) {
+                // Unknown voice name — retry with the system default rather than silence.
+                speechProcess = execFile('say', ['-r', '178', text], () => {
+                  speechProcess = null;
+                });
+              }
             });
           }
           break;
         }
+        case 'solve':
+        case 'solveNext': {
+          if (message['type'] === 'solve') {
+            solverProblem = String(message['problem'] ?? '');
+            solverTried = [];
+          } else if (lastSolverCause) {
+            solverTried = [...solverTried, lastSolverCause];
+          }
+          const errorText = String(message['errorText'] ?? '');
+          const frame = firstAppFrame(errorText);
+          const result = await runWorker(
+            'solver',
+            'pip.fastModel',
+            solverPrompt(codeContext, solverProblem, errorText, solverTried),
+          );
+          const reply = parseSolver(result.text);
+          lastSolverCause = reply.cause;
+          transport.post({ type: 'solverReply', reply, frame });
+          transport.post(statLine(result, 'solver'));
+          break;
+        }
+        case 'solveFixed':
+          solverTried = [];
+          lastSolverCause = '';
+          transport.post({ type: 'solverDone', problem: solverProblem });
+          break;
         case 'popupExplain':
         case 'popupAsk': {
           if (!codeContext) {

@@ -5,14 +5,15 @@ const drillEl = document.getElementById('drill');
 let activeDrill = null;
 
 function card(concept) {
-  const el = document.createElement('div');
-  el.className = 'card';
-  const title = document.createElement('strong');
-  title.textContent = concept.term;
+  // Collapsed by default: one term in a box. Click expands the details.
+  const el = document.createElement('details');
+  el.className = 'card flashcard';
+  const summary = document.createElement('summary');
+  const badge = concept.mastered ? ' · mastered' : concept.misses > 0 ? ` · weak x${concept.misses}` : '';
+  summary.textContent = `${concept.term}${badge}`;
   const meta = document.createElement('div');
   meta.className = 'muted';
-  const badge = concept.mastered ? 'mastered' : concept.misses > 0 ? `weak spot x${concept.misses}` : 'new';
-  meta.textContent = `${badge} · ${concept.file}:${concept.line}`;
+  meta.textContent = `${concept.file}:${concept.line}`;
   const line = document.createElement('div');
   line.textContent = concept.bottomLine;
   const row = document.createElement('div');
@@ -24,7 +25,7 @@ function card(concept) {
   del.textContent = 'Forget';
   del.onclick = () => pipPost({ type: 'delete', id: concept.id });
   row.append(drill, del);
-  el.append(title, meta, line, row);
+  el.append(summary, meta, line, row);
   return el;
 }
 

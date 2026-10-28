@@ -75,6 +75,49 @@ export function evaluateQuickFire(raw: string): { text: string; repaired: boolea
   return { text: first, repaired: first !== flat };
 }
 
+export interface SolverReply {
+  restate: string;
+  cause: string;
+  confidence: string;
+  check: string;
+  question: string;
+}
+
+/** Parse the Solver's 4-part structure; missing parts come back empty, never invented. */
+export function parseSolver(raw: string): SolverReply {
+  const grab = (label: string): string =>
+    raw
+      .split('\n')
+      .map((l) => l.trim())
+      .find((l) => l.toUpperCase().startsWith(`${label}:`))
+      ?.slice(label.length + 1)
+      .trim() ?? '';
+  const causeLine = grab('CAUSE');
+  const confidence = /confidence:\s*(likely|possible|long shot)/i.exec(causeLine)?.[1]?.toLowerCase() ?? 'possible';
+  return {
+    restate: grab('RESTATE'),
+    cause: causeLine.replace(/\(confidence:[^)]*\)/i, '').trim(),
+    confidence,
+    check: grab('CHECK'),
+    question: grab('QUESTION'),
+  };
+}
+
+/** First application frame from a Java/JS stack trace — deterministic, no LLM. */
+export function firstAppFrame(errorText: string): string {
+  for (const line of errorText.split('\n')) {
+    const java = /\bat\s+([\w.$]+\([\w.]+:\d+\))/.exec(line);
+    if (java && !/^(java\.|jdk\.|sun\.)/.test(java[1] ?? '')) {
+      return java[1] ?? '';
+    }
+    const js = /\bat\s+(.+:\d+:\d+)\)?\s*$/.exec(line.trim());
+    if (js && !(js[1] ?? '').includes('node_modules')) {
+      return js[1] ?? '';
+    }
+  }
+  return '';
+}
+
 export type DrillVerdict = 'CORRECT' | 'PARTLY' | 'WRONG';
 
 /** Parse the drill checker's two-line verdict. Anything unclear counts as PARTLY. */

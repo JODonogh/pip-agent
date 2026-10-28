@@ -85,6 +85,36 @@ export function drillCheckPrompt(concept: Concept, answer: string): ChatMessage[
   ];
 }
 
+/** Solver (/solver skill): restate, likeliest cause + confidence, fastest check, one question. */
+export function solverPrompt(
+  ctx: CodeContext | null,
+  problem: string,
+  errorText: string,
+  tried: readonly string[],
+): ChatMessage[] {
+  const triedLine = tried.length ? `\nAlready tried and ruled out (do NOT repeat these): ${tried.join(' | ')}` : '';
+  const errorLine = errorText ? `\nError/log pasted by the engineer:\n${errorText.slice(0, 2500)}` : '';
+  const codeLine = ctx ? `\nCurrently selected code:\n${codeBlock(ctx)}` : '';
+  return [
+    {
+      role: 'system',
+      content:
+        'You are a sharp colleague at the next desk, pair-solving. Short, concrete, no lecture. ' +
+        'Never propose editing code; propose the fastest check that confirms or rules out a cause.',
+    },
+    {
+      role: 'user',
+      content:
+        `[INTENT:solver]\nProblem: ${problem}${triedLine}${errorLine}${codeLine}\n` +
+        'Reply in EXACTLY this format, each on its own line:\n' +
+        'RESTATE: <the problem in one sentence>\n' +
+        'CAUSE: <most likely cause> (confidence: likely|possible|long shot)\n' +
+        'CHECK: <single fastest check: a log line, breakpoint, command, or file to read>\n' +
+        'QUESTION: <at most one question, only if information is missing>',
+    },
+  ];
+}
+
 export function drillPrompt(concept: Concept): ChatMessage[] {
   return [
     { role: 'system', content: BASE_RULES },

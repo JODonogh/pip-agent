@@ -148,13 +148,49 @@ const KIND_RANK = { endpoint: 0, method: 1, param: 2, hook: 3, state: 3, branch:
 const LAYER_OF = { endpoint: 'core', method: 'core', return: 'core', branch: 'core', assert: 'core', call: 'calls', import: 'imports', param: 'params', hook: 'hooks', state: 'hooks' };
 const SVGNS = 'http://www.w3.org/2000/svg';
 
+function shapeFor(g, node, cx, cy, w) {
+  // A shape language, not just boxes: pill, diamond, parallelogram, chip, document, terminator.
+  const h = 38;
+  if (node.kind === 'branch') {
+    const p = document.createElementNS(SVGNS, 'polygon');
+    p.setAttribute('points', `${cx},${cy - h / 2} ${cx + w / 2},${cy} ${cx},${cy + h / 2} ${cx - w / 2},${cy}`);
+    p.setAttribute('class', 'shape');
+    g.appendChild(p);
+    return;
+  }
+  if (node.kind === 'call') {
+    const p = document.createElementNS(SVGNS, 'polygon');
+    p.setAttribute('points', `${cx - w / 2 + 10},${cy - h / 2} ${cx + w / 2},${cy - h / 2} ${cx + w / 2 - 10},${cy + h / 2} ${cx - w / 2},${cy + h / 2}`);
+    p.setAttribute('class', 'shape');
+    g.appendChild(p);
+    return;
+  }
+  if (node.kind === 'import') {
+    const p = document.createElementNS(SVGNS, 'polygon');
+    const fold = 10;
+    p.setAttribute('points', `${cx - w / 2},${cy - h / 2} ${cx + w / 2 - fold},${cy - h / 2} ${cx + w / 2},${cy - h / 2 + fold} ${cx + w / 2},${cy + h / 2} ${cx - w / 2},${cy + h / 2}`);
+    p.setAttribute('class', 'shape');
+    g.appendChild(p);
+    return;
+  }
+  const rect = document.createElementNS(SVGNS, 'rect');
+  rect.setAttribute('x', cx - w / 2);
+  rect.setAttribute('y', cy - h / 2);
+  rect.setAttribute('width', w);
+  rect.setAttribute('height', h);
+  rect.setAttribute('rx', node.kind === 'endpoint' || node.kind === 'return' || node.kind === 'assert' ? 19 : node.kind === 'param' || node.kind === 'state' ? 11 : 6);
+  rect.setAttribute('class', 'shape');
+  if (node.kind === 'param' || node.kind === 'state') {
+    rect.setAttribute('stroke-dasharray', '4 3');
+  }
+  g.appendChild(rect);
+}
+
 function svgNode(node, cx, cy, w) {
   const g = document.createElementNS(SVGNS, 'g');
   g.setAttribute('class', `node kind-${node.kind}`);
   g.style.cursor = 'pointer';
-  const rect = document.createElementNS(SVGNS, 'rect');
-  rect.setAttribute('x', cx - w / 2); rect.setAttribute('y', cy - 19);
-  rect.setAttribute('width', w); rect.setAttribute('height', 38); rect.setAttribute('rx', 6);
+  shapeFor(g, node, cx, cy, w);
   const kind = document.createElementNS(SVGNS, 'text');
   kind.setAttribute('x', cx); kind.setAttribute('y', cy - 3);
   kind.setAttribute('text-anchor', 'middle'); kind.setAttribute('class', 'nodeKind');
@@ -164,7 +200,7 @@ function svgNode(node, cx, cy, w) {
   text.setAttribute('text-anchor', 'middle'); text.setAttribute('class', 'nodeLabel');
   const max = Math.floor(w / 7);
   text.textContent = node.label.length > max ? `${node.label.slice(0, max - 1)}…` : node.label;
-  g.append(rect, kind, text);
+  g.append(kind, text);
   g.onclick = (e) => openPopup(node.detail, e.clientX, e.clientY);
   return g;
 }
@@ -223,14 +259,30 @@ function renderDiagram() {
     });
     svg.appendChild(svgNode(centre, cx, cy, 150));
   } else if (diagramType === 'testing') {
-    // Horizontal: Arrange -> Act -> branches fan out -> Assert
+    // True testing shape: Arrange -> Act on one line, branches fan out, Assert below.
+    const arrange = nodes.filter((n) => n.kind === 'param');
+    const act = nodes.filter((n) => n.kind === 'method' || n.kind === 'endpoint');
+    const branches = nodes.filter((n) => n.kind === 'branch');
+    const asserts = nodes.filter((n) => n.kind === 'assert' || n.kind === 'return');
+    const others = nodes.filter((n) => ![...arrange, ...act, ...branches, ...asserts].includes(n));
     const W = 340;
-    const rows = Math.max(1, nodes.length);
-    svg = makeSvg(W, rows * 54 + 16);
-    nodes.forEach((node, i) => {
-      const y = 27 + i * 54;
-      if (i > 0) svgArrow(svg, 60, y - 34, 60, y - 19);
-      svg.appendChild(svgNode(node, 170, y, 260));
+    const branchRows = Math.max(1, branches.length);
+    const H = 120 + branchRows * 50 + asserts.length * 50;
+    svg = makeSvg(W, H);
+    const actNode = act[0] || nodes[0];
+    if (arrange[0] && actNode) {
+      svg.appendChild(svgNode(arrange[0], 70, 30, 124));
+      svgArrow(svg, 132, 30, 196, 30);
+    }
+    if (actNode) svg.appendChild(svgNode(actNode, 258, 30, 150));
+    const fan = branches.length ? branches : others;
+    fan.forEach((node, i) => {
+      const y = 92 + i * 50;
+      svg.appendChild(svgNode(node, 258, y, 190));
+    });
+    asserts.forEach((node, i) => {
+      const y = 100 + branchRows * 50 + i * 50;
+      svg.appendChild(svgNode(node, 258, y, 220));
     });
   } else {
     // Data flow: vertical flow
@@ -269,12 +321,12 @@ function bestVoice(voices) {
   return [...voices].sort((a, b) => rank(b) - rank(a))[0];
 }
 function fillVoices() {
+  // Backwards fallback only; the host's canonical `say` list replaces this.
   const select = $('voiceSelect');
   if (!select || !window.speechSynthesis) return;
   const voices = speechSynthesis.getVoices();
-  if (!voices.length) return;
+  if (!voices.length || select.options.length) return;
   const chosen = bestVoice(voices);
-  select.replaceChildren();
   for (const v of voices.filter((x) => x.lang.startsWith('en'))) {
     const opt = document.createElement('option');
     opt.value = v.name;
@@ -287,6 +339,30 @@ if (window.speechSynthesis) {
   speechSynthesis.onvoiceschanged = fillVoices;
   fillVoices();
 }
+vscode.postMessage({ type: 'getVoices' });
+
+function fillHostVoices(names) {
+  const select = $('voiceSelect');
+  if (!select || !names.length) return;
+  const rank = (n) => {
+    const s = n.toLowerCase();
+    let r = 0;
+    if (s.includes('premium')) r += 9;
+    if (s.includes('enhanced') || s.includes('natural')) r += 8;
+    if (/\b(flo|eddy|reed)\b/.test(s)) r += 7;
+    if (s.includes('serena') || s.includes('kate') || s.includes('daniel')) r += 3;
+    if (s.includes('samantha')) r -= 2;
+    return r;
+  };
+  const sorted = [...names].sort((a, b) => rank(b) - rank(a));
+  select.replaceChildren();
+  for (const name of sorted) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    select.appendChild(opt);
+  }
+}
 
 /* ---------- Messages ---------- */
 window.addEventListener('message', (event) => {
@@ -296,8 +372,34 @@ window.addEventListener('message', (event) => {
   } else if (msg.type === 'diagrams') {
     diagrams = msg.diagrams;
     renderDiagram();
+  } else if (msg.type === 'voices') {
+    fillHostVoices(msg.voices || []);
+  } else if (msg.type === 'streamPartial') {
+    // First words as they are generated — don't wait for the full answer.
+    const match = /BOTTOM_LINE:\s*(.+)/.exec(msg.text);
+    const result = $('result');
+    if (match && result) {
+      result.replaceChildren();
+      const bottom = document.createElement('div');
+      bottom.className = 'bottomline';
+      bottom.textContent = match[1];
+      const note = document.createElement('div');
+      note.className = 'muted';
+      note.textContent = 'writing…';
+      result.append(bottom, note);
+    }
   } else if (msg.type === 'explanation') {
     renderExplanation(msg);
+  } else if (msg.type === 'solverReply') {
+    renderSolver(msg);
+  } else if (msg.type === 'solverDone') {
+    $('solverResult').replaceChildren();
+    const done = document.createElement('div');
+    done.className = 'answer';
+    done.textContent = `Fixed: ${msg.problem} — the checks that got you there are the learning. Mark the concept if it taught you something.`;
+    $('solverResult').appendChild(done);
+    $('solveNextBtn').style.display = 'none';
+    $('solveFixedBtn').style.display = 'none';
   } else if (msg.type === 'marked') {
     const note = document.createElement('div');
     note.className = 'hint';
@@ -319,6 +421,40 @@ window.addEventListener('message', (event) => {
     if ($('stats')) $('stats').textContent = msg.text;
   }
 });
+
+/* ---------- Solver ---------- */
+function renderSolver(msg) {
+  const host = $('solverResult');
+  host.replaceChildren();
+  const { reply, frame } = msg;
+  const add = (label, text) => {
+    if (!text) return;
+    const div = document.createElement('div');
+    div.className = 'solverLine';
+    const strong = document.createElement('strong');
+    strong.textContent = `${label}: `;
+    div.append(strong, rich(text, keywordSet));
+    host.appendChild(div);
+  };
+  add('Problem', reply.restate);
+  add(`Likely cause (${reply.confidence})`, reply.cause);
+  add('Fastest check', reply.check);
+  add('First app frame', frame || '');
+  add('Question', reply.question);
+  $('solveNextBtn').style.display = '';
+  $('solveFixedBtn').style.display = '';
+}
+on('solveBtn', 'click', () => {
+  const problem = $('solverProblem').value.trim();
+  if (!problem) return;
+  $('solverResult').textContent = 'Thinking locally…';
+  vscode.postMessage({ type: 'solve', problem, errorText: $('solverError').value });
+});
+on('solveNextBtn', 'click', () => {
+  $('solverResult').textContent = 'Next hypothesis…';
+  vscode.postMessage({ type: 'solveNext', errorText: $('solverError').value });
+});
+on('solveFixedBtn', 'click', () => vscode.postMessage({ type: 'solveFixed' }));
 
 /* ---------- Controls ---------- */
 on('explainBtn', 'click', () => {
