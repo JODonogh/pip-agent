@@ -1,0 +1,74 @@
+body {
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-foreground);
+  background: var(--vscode-editor-background);
+  padding: 12px;
+  line-height: 1.45;
+}
+.banner { display: flex; align-items: center; gap: 10px; }
+.bannerMark { width: 84px; height: 28px; flex: none; }
+.banner h2 { font-size: 1.05em; margin: 0; font-weight: 600; }
+h3 { font-size: 1em; margin: 6px 0; }
+button {
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+  border: 1px solid var(--vscode-button-border, transparent);
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+button:hover { background: var(--vscode-button-secondaryHoverBackground); }
+select, input[type='text'] {
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--vscode-input-border, transparent);
+  border-radius: 4px;
+  padding: 5px;
+}
+input[type='text'] { width: 100%; box-sizing: border-box; margin: 8px 0; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; align-items: center; }
+.muted { color: var(--vscode-descriptionForeground); font-size: 0.9em; }
+.bottomline { font-size: 1.15em; font-weight: 600; margin: 12px 0; }
+.word { cursor: pointer; border-bottom: 1px dotted var(--vscode-textLink-foreground); }
+.word:hover { color: var(--vscode-textLink-foreground); }
+.code {
+  font-family: var(--vscode-editor-font-family, monospace);
+  color: var(--vscode-symbolIcon-functionForeground, var(--vscode-textLink-foreground));
+  background: var(--vscode-editor-inactiveSelectionBackground);
+  padding: 0 3px;
+  border-radius: 3px;
+}
+.hl { color: var(--vscode-editorWarning-foreground); }
+details, .card, .answer {
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 8px 0;
+}
+summary { cursor: pointer; font-weight: 600; }
+.hint {
+  border-left: 3px solid var(--vscode-editorWarning-foreground);
+  padding: 6px 10px;
+  margin: 10px 0;
+}
+.hidden { display: none; }
+.block { margin-top: 18px; border-top: 1px solid var(--vscode-panel-border); padding-top: 8px; }
+.shortcuts ul { margin: 6px 0; padding-left: 18px; }
+.diagramSvg { width: 100%; max-width: 340px; display: block; }
+.diagramSvg .edge { stroke: var(--vscode-foreground); stroke-width: 1.4; fill: none; }
+.diagramSvg .node rect {
+  fill: var(--vscode-editor-inactiveSelectionBackground);
+  stroke: var(--vscode-foreground);
+}
+.diagramSvg .node text { fill: var(--vscode-foreground); font-size: 10px; }
+.diagramSvg .node .nodeKind { font-size: 7.5px; letter-spacing: 1px; opacity: 0.75; }
+.diagramSvg .node.kind-endpoint rect, .diagramSvg .node.kind-method rect {
+  fill: var(--vscode-foreground);
+}
+.diagramSvg .node.kind-endpoint text, .diagramSvg .node.kind-method text {
+  fill: var(--vscode-editor-background);
+}
+footer { margin-top: 16px; border-top: 1px solid var(--vscode-panel-border); padding-top: 8px; }
+.timer input { width: 48px; }
+.layers label { font-size: 0.9em; }

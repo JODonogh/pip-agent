@@ -1,0 +1,262 @@
+import * as vscode from 'vscode';
+import { LearnPanel } from './panel';
+import { SidebarProvider } from './sidebar';
+import { PipStore } from './store';
+import { MockProvider, OllamaProvider } from './provider';
+import { evaluateDuck, evaluateExplanation, evaluateQuickFire, MAX_DEPTH } from './evaluator';
+import { bestHint, grade } from './memory';
+import { extractKeywords } from './keywords';
+import { analyzeCode } from './diagram';
+import { drillPrompt, duckPrompt, explainPrompt, quickFirePrompt } from './workers';
+import { estimateTokens, type ChatMessage, type CodeContext, type Concept, type ProviderResult } from './types';
+
+interface Transport {
+  post(message: Record<string, unknown>): void;
+}
+
+const TOKEN_CAPS: Record<string, number> = {
+  explainer: 380,
+  'quick-fire': 60,
+  'rubber-duck': 120,
+  drillmaster: 90,
+};
+
+/**
+ * Orchestrator: routes intents to workers, enforces contracts via the
+ * deterministic evaluator, falls back to Mock when Ollama is down, records
+ * observability. All model traffic is localhost-only (enforced in provider).
+ */
+export function activate(context: vscode.ExtensionContext): void {
+  const store = new PipStore(context.globalState);
+  const sidebar = new SidebarProvider(context.extensionUri, store);
+  let codeContext: CodeContext | null = null;
+  let lastBottomLine = '';
+  let lastTerm = '';
+
+  const runWorker = async (
+    worker: string,
+    modelSetting: 'pip.model' | 'pip.fastModel',
+    messages: ChatMessage[],
+  ): Promise<ProviderResult & { latencyMs: number }> => {
+    const config = vscode.workspace.getConfiguration();
+    const model = config.get<string>(modelSetting, 'mistral:latest');
+    const started = Date.now();
+    let result: ProviderResult;
+    try {
+      result = await new OllamaProvider(config.get<string>('pip.ollamaUrl', 'http://127.0.0.1:11434')).chat(
+        messages,
+        model,
+        TOKEN_CAPS[worker] ?? 256,
+      );
+    } catch {
+      result = await new MockProvider().chat(messages, model);
+    }
+    const latencyMs = Date.now() - started;
+    await store.addStat({
+      worker,
+      model: result.model,
+      latencyMs,
+      estTokens: estimateTokens(result.text),
+      costUsd: 0,
+      fromMock: result.fromMock,
+      at: Date.now(),
+    });
+    return { ...result, latencyMs };
+  };
+
+  const statLine = (r: ProviderResult & { latencyMs: number }, worker: string): Record<string, unknown> => ({
+    type: 'stat',
+    text: `${worker} · ${r.model}${r.fromMock ? ' (mock — Ollama not answering)' : ''} · ${r.latencyMs}ms · ~${estimateTokens(r.text)} tokens · $0.00 local`,
+  });
+
+  const captureContext = (): CodeContext | null => {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || editor.selection.isEmpty) {
+      void vscode.window.showInformationMessage('PIP: select some code first, then explain it.');
+      return null;
+    }
+    const doc = editor.document;
+    const startLine = Math.max(0, editor.selection.start.line - 15);
+    const endLine = Math.min(doc.lineCount - 1, editor.selection.end.line + 15);
+    codeContext = {
+      file: vscode.workspace.asRelativePath(doc.uri),
+      line: editor.selection.start.line + 1,
+      language: doc.languageId,
+      selection: doc.getText(editor.selection).slice(0, 6000),
+      surrounding: Array.from({ length: endLine - startLine + 1 }, (_, i) => doc.lineAt(startLine + i).text).join(
+        '\n',
+      ),
+    };
+    return codeContext;
+  };
+
+  const doExplain = async (transport: Transport, focus: string | undefined, depth: number): Promise<void> => {
+    if (!codeContext) {
+      transport.post({ type: 'status', text: 'Select code in the editor first.' });
+      return;
+    }
+    transport.post({ type: 'status', text: 'Thinking locally… (diagram below is instant)' });
+    // The diagram is deterministic — send it now, don't make it wait for the LLM.
+    transport.post({ type: 'diagram', diagram: analyzeCode(codeContext) });
+    const result = await runWorker('explainer', 'pip.model', explainPrompt(codeContext, focus));
+    const explanation = evaluateExplanation(result.text);
+    lastBottomLine = explanation.bottomLine;
+    lastTerm = focus ?? codeContext.selection.split('\n')[0]?.trim().slice(0, 60) ?? 'concept';
+    const hint = focus ? null : bestHint(store.concepts(), codeContext.selection, Date.now());
+    const fullText = [explanation.bottomLine, ...explanation.chunks.map((c) => `${c.title} ${c.body}`)].join('\n');
+    transport.post({
+      type: 'explanation',
+      explanation,
+      focus: focus ?? null,
+      depth,
+      hint,
+      keywords: extractKeywords(fullText),
+      diagram: analyzeCode(codeContext),
+    });
+    transport.post(statLine(result, 'explainer'));
+    await store.addHistory(focus ?? codeContext.selection.slice(0, 120));
+  };
+
+  /** One message handler for both surfaces (sidebar home + beside panel). */
+  const handleLearnMessage = (transport: Transport, message: { type: string; [key: string]: unknown }): void => {
+    void (async () => {
+      switch (message['type']) {
+        case 'help':
+          await vscode.commands.executeCommand('pip.showCommands');
+          break;
+        case 'explainSelection': {
+          const captured = captureContext();
+          if (captured) {
+            transport.post({ type: 'context', context: captured });
+            await doExplain(transport, undefined, 0);
+          }
+          break;
+        }
+        case 'openBeside': {
+          const captured = codeContext ?? captureContext();
+          if (captured) {
+            const panel = LearnPanel.show(context.extensionUri, captured);
+            panel.onMessage((m) => handleLearnMessage(panel, m));
+            panel.post({ type: 'context', context: captured });
+            await doExplain(panel, undefined, 0);
+          }
+          break;
+        }
+        case 'explain':
+          await doExplain(transport, undefined, 0);
+          break;
+        case 'explainWord': {
+          const depth = Number(message['depth'] ?? 0);
+          if (depth <= MAX_DEPTH && codeContext) {
+            await doExplain(transport, String(message['word'] ?? ''), depth);
+          }
+          break;
+        }
+        case 'quick':
+          if (codeContext) {
+            const result = await runWorker(
+              'quick-fire',
+              'pip.fastModel',
+              quickFirePrompt(codeContext, String(message['question'] ?? '')),
+            );
+            transport.post({ type: 'answer', kind: 'Quick-fire', text: evaluateQuickFire(result.text).text });
+            transport.post(statLine(result, 'quick-fire'));
+          }
+          break;
+        case 'duck':
+          if (codeContext) {
+            const result = await runWorker(
+              'rubber-duck',
+              'pip.fastModel',
+              duckPrompt(codeContext, String(message['statement'] ?? '')),
+            );
+            transport.post({ type: 'answer', kind: 'Rubber duck', text: evaluateDuck(result.text).text });
+            transport.post(statLine(result, 'rubber-duck'));
+          }
+          break;
+        case 'mark': {
+          if (!codeContext) {
+            break;
+          }
+          const termRaw = String(message['term'] ?? '').trim();
+          const term = termRaw || lastTerm || 'concept';
+          const concept: Concept = {
+            // Deterministic id: re-marking the same spot updates, never duplicates.
+            id: `${term}|${codeContext.file}|${codeContext.line}`,
+            term,
+            bottomLine: String(message['bottomLine'] ?? '').trim() || lastBottomLine,
+            file: codeContext.file,
+            line: codeContext.line,
+            createdAt: Date.now(),
+            lastSeenAt: Date.now(),
+            hits: 0,
+            misses: 0,
+            mastered: false,
+          };
+          await store.upsertConcept(concept);
+          sidebar.refresh();
+          transport.post({ type: 'marked', term, count: store.concepts().length });
+          break;
+        }
+        default:
+          break;
+      }
+    })();
+  };
+
+  const explainBesideCommand = async (): Promise<void> => {
+    const captured = captureContext();
+    if (!captured) {
+      return;
+    }
+    const panel = LearnPanel.show(context.extensionUri, captured);
+    panel.onMessage((m) => handleLearnMessage(panel, m));
+    await doExplain(panel, undefined, 0);
+  };
+
+  sidebar.onMessage((message) => {
+    void (async () => {
+      if (['grade', 'delete', 'drill'].includes(String(message['type']))) {
+        const concepts = store.concepts();
+        const concept = concepts.find((c) => c.id === String(message['id'] ?? ''));
+        if (message['type'] === 'grade' && concept) {
+          await store.upsertConcept(grade(concept, message['gotIt'] === true, Date.now()));
+          sidebar.refresh();
+        } else if (message['type'] === 'delete' && concept) {
+          await store.saveConcepts(concepts.filter((c) => c.id !== concept.id));
+          sidebar.refresh();
+        } else if (message['type'] === 'drill' && concept) {
+          const result = await runWorker('drillmaster', 'pip.fastModel', drillPrompt(concept));
+          sidebar.post({ type: 'drillQuestion', id: concept.id, term: concept.term, text: result.text.trim() });
+        }
+        return;
+      }
+      handleLearnMessage(sidebar, message);
+    })();
+  });
+
+  const showCommands = async (): Promise<void> => {
+    const pick = await vscode.window.showQuickPick(
+      [
+        { label: 'Explain selection (beside editor)', detail: 'Cmd+Shift+L — disposable panel next to your code', command: 'pip.explainSelection' },
+        { label: 'Open PIP sidebar (Learn, Diagram, Flashcards, Drill)', detail: 'Click the PIP icon in the activity bar — no shortcut needed', command: 'pip.focusSidebar' },
+        { label: 'PIP settings (Ollama URL, models)', detail: 'pip.ollamaUrl / pip.model / pip.fastModel', command: 'workbench.action.openSettings' },
+      ],
+      { placeHolder: 'PIP commands — pick one to run it' },
+    );
+    if (pick) {
+      await vscode.commands.executeCommand(pick.command);
+    }
+  };
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('pip.explainSelection', explainBesideCommand),
+    vscode.commands.registerCommand('pip.showCommands', showCommands),
+    vscode.commands.registerCommand('pip.focusSidebar', () => vscode.commands.executeCommand('pip.sidebar.focus')),
+    vscode.window.registerWebviewViewProvider('pip.sidebar', sidebar),
+  );
+}
+
+export function deactivate(): void {
+  // Panels dispose themselves; state lives in globalState; timer lives/dies with the sidebar page.
+}

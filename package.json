@@ -1,0 +1,65 @@
+{
+  "name": "agent-pip",
+  "displayName": "Agent PIP — Learn",
+  "description": "Engineer-led learning beside your code. Local Ollama models only — nothing leaves this machine.",
+  "version": "0.1.0",
+  "publisher": "local-poc",
+  "license": "UNLICENSED",
+  "engines": { "vscode": "^1.90.0" },
+  "categories": ["Other"],
+  "main": "./out/extension.js",
+  "activationEvents": ["onCommand:pip.explainSelection", "onView:pip.sidebar"],
+  "contributes": {
+    "commands": [
+      { "command": "pip.explainSelection", "title": "PIP: Explain selection", "category": "PIP" },
+      { "command": "pip.focusSidebar", "title": "PIP: Show Learn sidebar", "category": "PIP" },
+      { "command": "pip.showCommands", "title": "PIP: Commands & shortcuts", "category": "PIP" }
+    ],
+    "keybindings": [
+      { "command": "pip.explainSelection", "key": "cmd+shift+l", "mac": "cmd+shift+l", "win": "ctrl+shift+l", "when": "editorHasSelection" }
+    ],
+    "menus": {
+      "editor/context": [
+        { "command": "pip.explainSelection", "when": "editorHasSelection", "group": "navigation@99" }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [{ "id": "agentPip", "title": "Agent PIP", "icon": "media/icon.svg" }]
+    },
+    "views": {
+      "agentPip": [{ "type": "webview", "id": "pip.sidebar", "name": "Learn · Diagram · Flashcards · Drill" }]
+    },
+    "configuration": {
+      "title": "Agent PIP",
+      "properties": {
+        "pip.ollamaUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:11434",
+          "description": "Ollama base URL. MUST be localhost — any other host is rejected in code."
+        },
+        "pip.model": {
+          "type": "string",
+          "default": "mistral:latest",
+          "description": "Model for explanations (local Ollama model name)."
+        },
+        "pip.fastModel": {
+          "type": "string",
+          "default": "mistral:latest",
+          "description": "Model for quick-fire / rubber-duck / drills (local Ollama model name)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "test": "vitest run",
+    "package:vsix": "npx @vscode/vsce package --allow-missing-repository"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}
