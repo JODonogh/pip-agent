@@ -139,8 +139,55 @@ function renderExplanation(msg) {
   }
   if (msg.diagrams) {
     diagrams = msg.diagrams;
+    walkIndex = -1;
     renderDiagram();
   }
+  if (msg.verify) renderVerify(msg.verify);
+  // Auditory mode (tired eyes): read the bottom line automatically.
+  if ($('learnMode')?.value === 'auditory' && current.bottomLine) {
+    vscode.postMessage({ type: 'speak', text: current.bottomLine, voice: $('voiceSelect')?.value || '' });
+  }
+}
+
+let verifyInfo = null;
+function renderVerify(verify) {
+  verifyInfo = verify;
+  const host = $('verifyBody');
+  if (!host) return;
+  host.replaceChildren();
+  if (verify.http) {
+    const line = document.createElement('div');
+    line.innerHTML = '';
+    const label = document.createElement('strong');
+    label.textContent = `API (Bruno-style): ${verify.http.method} ${verify.http.path}`;
+    const row = document.createElement('div');
+    row.className = 'row';
+    const base = document.createElement('input');
+    base.type = 'text';
+    base.id = 'brunoBase';
+    base.value = 'http://localhost:8081';
+    base.title = 'Local base URL (localhost only)';
+    const send = document.createElement('button');
+    send.textContent = 'Send request';
+    send.onclick = () =>
+      vscode.postMessage({ type: 'brunoSend', baseUrl: base.value, method: verify.http.method, path: verify.http.path });
+    row.append(base, send);
+    host.append(label, row);
+  }
+  if (verify.sqlHint) {
+    const db = document.createElement('div');
+    db.textContent = `DB (DBeaver): ${verify.sqlHint}`;
+    host.appendChild(db);
+  }
+  const testRow = document.createElement('div');
+  testRow.className = 'row';
+  const testBtn = document.createElement('button');
+  testBtn.textContent = 'Generate a test skeleton';
+  testBtn.onclick = () => vscode.postMessage({ type: 'genTest' });
+  testRow.appendChild(testBtn);
+  const out = document.createElement('pre');
+  out.id = 'verifyOut';
+  host.append(testRow, out);
 }
 
 /* ---------- Diagrams: a different layout per kind ---------- */
@@ -294,6 +341,9 @@ function renderDiagram() {
       svg.appendChild(svgNode(node, W / 2, y, 280));
     });
   }
+  svg.querySelectorAll('.node').forEach((g, i) => {
+    if (i === walkIndex) g.classList.add('walkActive');
+  });
   host.appendChild(svg);
 }
 document.querySelectorAll('.diagramTypeBtn').forEach((btn) =>
@@ -417,6 +467,63 @@ window.addEventListener('message', (event) => {
     div.className = 'answer';
     div.appendChild(rich(msg.text, keywordSet));
     log.appendChild(div);
+  } else if (msg.type === 'deepDive') {
+    const card = document.createElement('details');
+    card.className = 'card deepCard';
+    card.open = true;
+    const summary = document.createElement('summary');
+    summary.textContent = msg.kind.startsWith('Trade-off') ? msg.kind : msg.kind[0].toUpperCase() + msg.kind.slice(1);
+    card.append(summary, explanationBody(msg.explanation, new Set((msg.keywords || []).map((k) => String(k).toLowerCase()))));
+    $('deepDives').appendChild(card);
+  } else if (msg.type === 'testSkeleton') {
+    const out = $('verifyOut');
+    if (out) out.textContent = msg.text;
+  } else if (msg.type === 'verifyResult') {
+    const out = $('verifyOut');
+    if (out) out.textContent = msg.text;
+  } else if (msg.type === 'approaches') {
+    approaches = msg.approaches || [];
+    renderApproaches();
+  } else if (msg.type === 'convergeResult') {
+    const div = document.createElement('div');
+    div.className = 'answer';
+    div.textContent = `${msg.approach}\n${msg.text}`;
+    $('innovatorResult').appendChild(div);
+  } else if (msg.type === 'scamperResult') {
+    const div = document.createElement('div');
+    div.className = 'answer';
+    const strong = document.createElement('strong');
+    strong.textContent = `${msg.lens}: `;
+    div.append(strong, rich(msg.text, keywordSet));
+    $('innovatorResult').appendChild(div);
+  } else if (msg.type === 'today') {
+    const body = $('todayBody');
+    if (body) {
+      body.textContent = msg.terms?.length
+        ? `Marked today: ${msg.terms.join(', ')}`
+        : 'Nothing marked yet today.';
+    }
+    if (msg.review) {
+      const card = document.createElement('details');
+      card.className = 'card deepCard';
+      card.open = true;
+      const summary = document.createElement('summary');
+      summary.textContent = `From yesterday (${msg.review.date}) — review before you start`;
+      const text = document.createElement('div');
+      text.textContent = msg.review.text;
+      card.append(summary, text);
+      $('reviewCard').appendChild(card);
+    }
+  } else if (msg.type === 'reviewCard') {
+    const card = document.createElement('details');
+    card.className = 'card deepCard';
+    card.open = true;
+    const summary = document.createElement('summary');
+    summary.textContent = "Tonight's summary — these hints resurface tomorrow";
+    const text = document.createElement('div');
+    text.textContent = msg.text;
+    card.append(summary, text);
+    $('reviewCard').appendChild(card);
   } else if (msg.type === 'stat') {
     if ($('stats')) $('stats').textContent = msg.text;
   }
@@ -455,6 +562,96 @@ on('solveNextBtn', 'click', () => {
   vscode.postMessage({ type: 'solveNext', errorText: $('solverError').value });
 });
 on('solveFixedBtn', 'click', () => vscode.postMessage({ type: 'solveFixed' }));
+
+/* ---------- Style, deep dives, innovator, today, collapse ---------- */
+let approaches = [];
+let walkIndex = -1;
+let walkTimer = null;
+
+document.querySelectorAll('.styleChip').forEach((chip) =>
+  chip.addEventListener('click', () => {
+    document.querySelectorAll('.styleChip').forEach((c) => c.classList.toggle('isActive', c === chip));
+    vscode.postMessage({ type: 'setStyle', style: chip.getAttribute('data-style') });
+  }),
+);
+on('foundationsBtn', 'click', () => vscode.postMessage({ type: 'deep', kind: 'foundations' }));
+on('rootsBtn', 'click', () => vscode.postMessage({ type: 'deep', kind: 'roots' }));
+on('pseudoBtn', 'click', () => vscode.postMessage({ type: 'deep', kind: 'pseudocode' }));
+document.querySelectorAll('.tradeBtn').forEach((btn) =>
+  btn.addEventListener('click', () =>
+    vscode.postMessage({ type: 'deep', kind: `Trade-off: ${btn.getAttribute('data-trade')}` }),
+  ),
+);
+
+function renderApproaches() {
+  const host = $('innovatorResult');
+  host.replaceChildren();
+  for (const approach of approaches) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.textContent = approach;
+    const row = document.createElement('div');
+    row.className = 'row';
+    const pick = document.createElement('button');
+    pick.textContent = 'Converge on this';
+    pick.onclick = () => vscode.postMessage({ type: 'converge', approach });
+    row.appendChild(pick);
+    card.appendChild(row);
+    host.appendChild(card);
+  }
+}
+on('divergeBtn', 'click', () => vscode.postMessage({ type: 'diverge' }));
+on('randomiseBtn', 'click', () => {
+  // Shuffle + a random SCAMPER lens: the human still decides, the machine provokes.
+  approaches = [...approaches].sort(() => Math.random() - 0.5);
+  renderApproaches();
+  const lenses = ['Metaphor Mixer', 'Subtraction Dare', 'Reverse It'];
+  vscode.postMessage({ type: 'scamper', lens: lenses[Math.floor(Math.random() * lenses.length)] });
+});
+document.querySelectorAll('.scamperBtn').forEach((btn) =>
+  btn.addEventListener('click', () => vscode.postMessage({ type: 'scamper', lens: btn.getAttribute('data-lens') })),
+);
+on('summariseDayBtn', 'click', () => vscode.postMessage({ type: 'summariseDay' }));
+vscode.postMessage({ type: 'getToday' });
+on('collapseAllBtn', 'click', () => {
+  document.querySelectorAll('details').forEach((d) => {
+    d.open = false;
+  });
+});
+
+/* Walk the diagram: step through nodes with captions */
+function setWalk(index) {
+  const nodes = visibleNodes();
+  if (!nodes.length) return;
+  walkIndex = Math.max(0, Math.min(index, nodes.length - 1));
+  renderDiagram();
+  const node = nodes[walkIndex];
+  if ($('walkCaption')) {
+    $('walkCaption').textContent = `Step ${walkIndex + 1}/${nodes.length}: ${node.detail}`;
+  }
+}
+on('walkNextBtn', 'click', () => setWalk(walkIndex + 1));
+on('walkPrevBtn', 'click', () => setWalk(walkIndex - 1));
+on('walkPlayBtn', 'click', (e) => {
+  if (walkTimer) {
+    clearInterval(walkTimer);
+    walkTimer = null;
+    e.target.textContent = '▶ Walk';
+    return;
+  }
+  e.target.textContent = '⏸ Walking…';
+  setWalk(0);
+  walkTimer = setInterval(() => {
+    if (walkIndex >= visibleNodes().length - 1) {
+      clearInterval(walkTimer);
+      walkTimer = null;
+      const btn = $('walkPlayBtn');
+      if (btn) btn.textContent = '▶ Walk';
+      return;
+    }
+    setWalk(walkIndex + 1);
+  }, 1400);
+});
 
 /* ---------- Controls ---------- */
 on('explainBtn', 'click', () => {

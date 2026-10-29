@@ -46,6 +46,13 @@ textarea {
 .verdict-wrong { color: var(--vscode-errorForeground); }
 .verdict-partly { color: var(--vscode-editorWarning-foreground); }
 .bottomShortcuts { margin-top: 18px; }
+.topGrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 8px 0; }
+.topGrid button { font-weight: 600; padding: 7px 4px; }
+.styleChip.isActive, .diagramTypeBtn.isActive { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
+.bottomBar { display: flex; justify-content: flex-end; margin-top: 10px; }
+.diagramSvg .node.walkActive .shape { fill: var(--vscode-editorWarning-foreground); stroke-width: 2.5; }
+.deepCard summary { font-weight: 600; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.85em; }
 .banner h2 { font-size: 1.6em; margin: 6px 0 10px; font-weight: 700; text-align: center; }
 .diagramSvg .node .shape { fill: var(--vscode-editor-inactiveSelectionBackground); stroke: var(--vscode-foreground); }
 .diagramSvg .node.kind-endpoint .shape, .diagramSvg .node.kind-method .shape { fill: var(--vscode-foreground); }

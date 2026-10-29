@@ -43,7 +43,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
   <header class="banner">${BANNER_SVG}<h2>Agent PIP</h2></header>
   ${LEARN_BODY}
 
-  <details class="block" id="cardsBlock" open>
+  <details class="block" id="cardsBlock">
     <summary><strong>Flashcards &amp; Drill</strong> <span class="muted">— weak spots first</span></summary>
     <p class="muted">Drill me → answer in your own words → Check. Wrong = weak spot, two right = mastered.</p>
     <div id="drill"></div>

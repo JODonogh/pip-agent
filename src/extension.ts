@@ -3,11 +3,39 @@ import { LearnPanel } from './panel';
 import { SidebarProvider } from './sidebar';
 import { PipStore } from './store';
 import { MockProvider, OllamaProvider } from './provider';
-import { evaluateDuck, evaluateExplanation, evaluateQuickFire, firstAppFrame, MAX_DEPTH, parseDrillVerdict, parseSolver } from './evaluator';
+import {
+  evaluateDuck,
+  evaluateExplanation,
+  evaluateQuickFire,
+  firstAppFrame,
+  MAX_DEPTH,
+  parseApproaches,
+  parseDrillVerdict,
+  parseMcq,
+  parseSolver,
+} from './evaluator';
 import { bestHint, grade } from './memory';
 import { extractKeywords } from './keywords';
 import { analyzeDiagrams } from './diagram';
-import { drillCheckPrompt, drillPrompt, duckPrompt, explainPrompt, popupPrompt, quickFirePrompt, solverPrompt } from './workers';
+import {
+  convergePrompt,
+  daySummaryPrompt,
+  deepPrompt,
+  divergePrompt,
+  drillCheckPrompt,
+  drillPrompt,
+  duckPrompt,
+  explainPrompt,
+  mcqPrompt,
+  popupPrompt,
+  quickFirePrompt,
+  scamperPrompt,
+  solverPrompt,
+  testSkeletonPrompt,
+  type ExplainStyle,
+} from './workers';
+import { deriveVerify } from './verify';
+import { assertLocalhost } from './types';
 import { estimateTokens, type ChatMessage, type CodeContext, type Concept, type Explanation, type ProviderResult } from './types';
 import { execFile, type ChildProcess } from 'node:child_process';
 
@@ -24,6 +52,13 @@ const TOKEN_CAPS: Record<string, number> = {
   'drill-check': 90,
   popup: 70,
   solver: 220,
+  deep: 340,
+  diverge: 220,
+  converge: 120,
+  scamper: 200,
+  mcq: 260,
+  test: 400,
+  summary: 160,
 };
 
 /**
@@ -109,6 +144,8 @@ export function activate(context: vscode.ExtensionContext): void {
     return codeContext;
   };
 
+  let currentStyle: ExplainStyle = 'plain';
+
   const doExplain = async (transport: Transport, focus: string | undefined, depth: number): Promise<void> => {
     if (!codeContext) {
       transport.post({ type: 'status', text: 'Select code in the editor first.' });
@@ -117,7 +154,7 @@ export function activate(context: vscode.ExtensionContext): void {
     transport.post({ type: 'status', text: 'Thinking locally… (diagrams below are instant)' });
     // The diagrams are deterministic — send them now, don't make them wait for the LLM.
     transport.post({ type: 'diagrams', diagrams: analyzeDiagrams(codeContext) });
-    const cacheKey = `${codeContext.file}:${codeContext.line}:${focus ?? ''}:${codeContext.selection.length}`;
+    const cacheKey = `${codeContext.file}:${codeContext.line}:${focus ?? ''}:${currentStyle}:${codeContext.selection.length}`;
     const cached = explainCache.get(cacheKey);
     if (cached) {
       transport.post({
@@ -128,6 +165,7 @@ export function activate(context: vscode.ExtensionContext): void {
         hint: null,
         keywords: extractKeywords(cached.bottomLine),
         diagrams: analyzeDiagrams(codeContext),
+        verify: deriveVerify(codeContext, analyzeDiagrams(codeContext)),
       });
       transport.post({ type: 'stat', text: 'explainer · cached (instant) · $0.00 local' });
       return;
@@ -141,7 +179,7 @@ export function activate(context: vscode.ExtensionContext): void {
       try {
         const streamed = await new OllamaProvider(
           config.get<string>('pip.ollamaUrl', 'http://127.0.0.1:11434'),
-        ).chatStream(explainPrompt(codeContext, focus), config.get<string>('pip.model', 'mistral:latest'), 320, (acc) => {
+        ).chatStream(explainPrompt(codeContext, focus, currentStyle), config.get<string>('pip.model', 'mistral:latest'), 320, (acc) => {
           if (Date.now() - lastSent > 250) {
             lastSent = Date.now();
             transport.post({ type: 'streamPartial', text: acc });
@@ -163,8 +201,8 @@ export function activate(context: vscode.ExtensionContext): void {
     }
     result ??=
       depth > 0
-        ? await runWorker('explainer-nested', 'pip.fastModel', explainPrompt(codeContext, focus))
-        : await runWorker('explainer', 'pip.model', explainPrompt(codeContext, focus));
+        ? await runWorker('explainer-nested', 'pip.fastModel', explainPrompt(codeContext, focus, currentStyle))
+        : await runWorker('explainer', 'pip.model', explainPrompt(codeContext, focus, currentStyle));
     const explanation = evaluateExplanation(result.text);
     explainCache.set(cacheKey, explanation);
     lastBottomLine = explanation.bottomLine;
@@ -179,6 +217,7 @@ export function activate(context: vscode.ExtensionContext): void {
       hint,
       keywords: extractKeywords(fullText),
       diagrams: analyzeDiagrams(codeContext),
+      verify: deriveVerify(codeContext, analyzeDiagrams(codeContext)),
     });
     transport.post(statLine(result, 'explainer'));
     await store.addHistory(focus ?? codeContext.selection.slice(0, 120));
@@ -255,6 +294,97 @@ export function activate(context: vscode.ExtensionContext): void {
           lastSolverCause = '';
           transport.post({ type: 'solverDone', problem: solverProblem });
           break;
+        case 'setStyle':
+          currentStyle = (String(message['style'] ?? 'plain') as ExplainStyle) || 'plain';
+          break;
+        case 'deep': {
+          if (!codeContext) break;
+          const kind = String(message['kind'] ?? 'foundations');
+          const result = await runWorker('deep', 'pip.model', deepPrompt(codeContext, kind));
+          const explanation = evaluateExplanation(result.text);
+          transport.post({
+            type: 'deepDive',
+            kind,
+            explanation,
+            keywords: extractKeywords(explanation.bottomLine),
+          });
+          transport.post(statLine(result, `deep:${kind}`));
+          break;
+        }
+        case 'diverge': {
+          if (!codeContext) break;
+          const result = await runWorker('diverge', 'pip.fastModel', divergePrompt(codeContext));
+          transport.post({ type: 'approaches', approaches: parseApproaches(result.text), fromMock: result.fromMock });
+          transport.post(statLine(result, 'diverge'));
+          break;
+        }
+        case 'converge': {
+          if (!codeContext) break;
+          const approach = String(message['approach'] ?? '');
+          const result = await runWorker('converge', 'pip.fastModel', convergePrompt(codeContext, approach));
+          transport.post({ type: 'convergeResult', approach, text: result.text.trim() });
+          break;
+        }
+        case 'scamper': {
+          if (!codeContext) break;
+          const lens = String(message['lens'] ?? 'Reverse It');
+          const result = await runWorker('scamper', 'pip.fastModel', scamperPrompt(codeContext, lens));
+          transport.post({ type: 'scamperResult', lens, text: result.text.trim() });
+          transport.post(statLine(result, `scamper:${lens}`));
+          break;
+        }
+        case 'genTest': {
+          if (!codeContext) break;
+          const result = await runWorker('test', 'pip.model', testSkeletonPrompt(codeContext));
+          transport.post({ type: 'testSkeleton', text: result.text.trim() });
+          transport.post(statLine(result, 'test-designer'));
+          break;
+        }
+        case 'brunoSend': {
+          // Bruno-style API prod: localhost only, enforced exactly like model traffic.
+          const baseRaw = String(message['baseUrl'] ?? 'http://localhost:8081');
+          const method = String(message['method'] ?? 'GET').toUpperCase();
+          const path = String(message['path'] ?? '/');
+          try {
+            const base = assertLocalhost(baseRaw);
+            const url = new URL(path, base);
+            const started = Date.now();
+            const res = await fetch(url, { method });
+            const body = (await res.text()).slice(0, 600);
+            transport.post({ type: 'verifyResult', text: `${method} ${url.pathname} → ${res.status} in ${Date.now() - started}ms\n${body}` });
+          } catch (error) {
+            transport.post({
+              type: 'verifyResult',
+              text: `Request failed: ${error instanceof Error ? error.message : 'unknown error'} — is the backend running locally? That failure is itself the lesson: check the server, port, then the path.`,
+            });
+          }
+          break;
+        }
+        case 'getToday': {
+          const today = new Date().toDateString();
+          const todays = store.concepts().filter((c) => new Date(c.createdAt).toDateString() === today);
+          const review = store.review();
+          transport.post({
+            type: 'today',
+            terms: todays.map((c) => c.term),
+            review: review && new Date(review.date).toDateString() !== today ? review : null,
+          });
+          break;
+        }
+        case 'summariseDay': {
+          const today = new Date().toDateString();
+          const todays = store.concepts().filter((c) => new Date(c.createdAt).toDateString() === today);
+          const pool = todays.length ? todays : store.concepts().slice(0, 8);
+          if (!pool.length) {
+            transport.post({ type: 'reviewCard', text: 'Nothing marked yet today — mark a concept first, then summarise.' });
+            break;
+          }
+          const result = await runWorker('summary', 'pip.fastModel', daySummaryPrompt(pool));
+          await store.saveReview({ date: new Date().toISOString().slice(0, 10), text: result.text.trim() });
+          transport.post({ type: 'reviewCard', text: result.text.trim() });
+          transport.post(statLine(result, 'day-summary'));
+          break;
+        }
         case 'popupExplain':
         case 'popupAsk': {
           if (!codeContext) {
@@ -367,10 +497,18 @@ export function activate(context: vscode.ExtensionContext): void {
 
   sidebar.onMessage((message) => {
     void (async () => {
-      if (['grade', 'delete', 'drill', 'drillAnswer'].includes(String(message['type']))) {
+      if (['grade', 'delete', 'drill', 'drillAnswer', 'mcq'].includes(String(message['type']))) {
         const concepts = store.concepts();
         const concept = concepts.find((c) => c.id === String(message['id'] ?? ''));
-        if (message['type'] === 'drillAnswer' && concept) {
+        if (message['type'] === 'mcq' && concept) {
+          const result = await runWorker('mcq', 'pip.fastModel', mcqPrompt(concept));
+          const mcq = parseMcq(result.text);
+          if (mcq) {
+            sidebar.post({ type: 'mcqQuestion', id: concept.id, term: concept.term, mcq });
+          } else {
+            sidebar.post({ type: 'mcqQuestion', id: concept.id, term: concept.term, mcq: null });
+          }
+        } else if (message['type'] === 'drillAnswer' && concept) {
           const result = await runWorker(
             'drill-check',
             'pip.fastModel',

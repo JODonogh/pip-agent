@@ -4,6 +4,13 @@ import type { Concept, TurnStat } from './types';
 const CONCEPTS_KEY = 'pip.concepts.v1';
 const HISTORY_KEY = 'pip.history.v1';
 const STATS_KEY = 'pip.stats.v1';
+const REVIEW_KEY = 'pip.review.v1';
+
+export interface ReviewCard {
+  /** Local date string (yyyy-mm-dd) the summary was made. */
+  date: string;
+  text: string;
+}
 
 /**
  * Context store over VS Code globalState (survives restarts, lives in the
@@ -34,6 +41,14 @@ export class PipStore {
   async addHistory(question: string): Promise<void> {
     const next = [question, ...this.history()].slice(0, 100);
     await this.state.update(HISTORY_KEY, next);
+  }
+
+  review(): ReviewCard | null {
+    return this.state.get<ReviewCard | null>(REVIEW_KEY, null);
+  }
+
+  async saveReview(review: ReviewCard): Promise<void> {
+    await this.state.update(REVIEW_KEY, review);
   }
 
   stats(): TurnStat[] {

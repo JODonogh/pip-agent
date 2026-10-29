@@ -114,6 +114,25 @@ export class MockProvider implements ModelProvider {
         fromMock: true,
       };
     }
+    if (intent === 'diverge') {
+      return {
+        text: [
+          'APPROACH: Keep it as-is — mock fallback, Ollama is not answering.',
+          'APPROACH: Simplify — delete a layer and call the service directly.',
+          'APPROACH: Cache — memoise the result per input.',
+          'APPROACH: Stream — return results incrementally.',
+        ].join('\n'),
+        model,
+        fromMock: true,
+      };
+    }
+    if (intent === 'mcq') {
+      return {
+        text: 'Q: Mock question — what does the marked concept do?\nA: Nothing at all\nB: Exactly what its card says\nC: It only works on Tuesdays\nD: It deletes data\nANSWER: B',
+        model,
+        fromMock: true,
+      };
+    }
     if (intent === 'solver') {
       return {
         text: [

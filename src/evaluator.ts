@@ -75,6 +75,48 @@ export function evaluateQuickFire(raw: string): { text: string; repaired: boolea
   return { text: first, repaired: first !== flat };
 }
 
+/** Parse Diverge output into approach cards. */
+export function parseApproaches(raw: string): string[] {
+  return raw
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l.toUpperCase().startsWith('APPROACH:'))
+    .map((l) => l.slice('APPROACH:'.length).trim())
+    .filter(Boolean)
+    .slice(0, 6);
+}
+
+export interface Mcq {
+  question: string;
+  options: string[];
+  answerIndex: number;
+}
+
+/** Parse a multiple-choice puzzle. Returns null when the model broke the format. */
+export function parseMcq(raw: string): Mcq | null {
+  const grab = (label: string): string =>
+    raw
+      .split('\n')
+      .map((l) => l.trim())
+      .find((l) => l.startsWith(`${label}:`))
+      ?.slice(label.length + 1)
+      .trim() ?? '';
+  const question = grab('Q');
+  const options = ['A', 'B', 'C', 'D'].map(grab);
+  const answerLetter = grab('ANSWER').toUpperCase().charAt(0);
+  const answerIndex = ['A', 'B', 'C', 'D'].indexOf(answerLetter);
+  if (!question || options.some((o) => !o) || answerIndex < 0) {
+    return null;
+  }
+  return { question, options, answerIndex };
+}
+
+/** Deterministic cloze: blank the term out of its own bottom line. */
+export function makeCloze(concept: { term: string; bottomLine: string }): string {
+  const escaped = concept.term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return concept.bottomLine.replace(new RegExp(escaped, 'i'), '______');
+}
+
 export interface SolverReply {
   restate: string;
   cause: string;

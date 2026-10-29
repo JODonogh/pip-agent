@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { extractKeywords, isKeyword } from './keywords';
 import { analyzeCode, analyzeDiagrams, LAYER_OF_KIND } from './diagram';
+import { makeCloze, parseApproaches, parseMcq } from './evaluator';
+import { deriveVerify } from './verify';
 import { PipStore } from './store';
 import type { CodeContext, Concept } from './types';
 
@@ -82,6 +84,23 @@ describe('diagram analyser (Systematic/Graphical)', () => {
     expect(d.nodes.some((n) => n.kind === 'state' && n.label.includes('setOpen'))).toBe(true);
     expect(LAYER_OF_KIND['state']).toBe('hooks');
     expect(LAYER_OF_KIND['call']).toBe('calls');
+  });
+});
+
+describe('innovator + games + verify parsers', () => {
+  it('parses approaches and MCQ, rejects broken MCQ', () => {
+    expect(parseApproaches('APPROACH: A — x\nAPPROACH: B — y\nnoise')).toHaveLength(2);
+    const mcq = parseMcq('Q: Why?\nA: one\nB: two\nC: three\nD: four\nANSWER: C');
+    expect(mcq?.answerIndex).toBe(2);
+    expect(parseMcq('Q: broken')).toBeNull();
+  });
+  it('cloze blanks the term out of its own line', () => {
+    expect(makeCloze({ term: 'getAll', bottomLine: 'getAll returns everything' })).toBe('______ returns everything');
+  });
+  it('verify derives a Bruno request and a DB hint from an endpoint', () => {
+    const verify = deriveVerify(springCtx, analyzeDiagrams(springCtx));
+    expect(verify.http).toEqual({ method: 'GET', path: '/api/v1/backend' });
+    expect(deriveVerify({ ...springCtx, selection: 'repo.findAll()' }, analyzeDiagrams(springCtx)).sqlHint).toContain('SELECT');
   });
 });
 
