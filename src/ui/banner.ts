@@ -16,7 +16,7 @@ export const SHORTCUTS_HTML = `<details class="shortcuts">
 const CONTROL_HELP: Record<string, string> = {
   explainBtn: 'Explain the code currently selected in the editor.',
   markBtn: 'Keep this idea in Review so you can practise recalling it later.',
-  speakBtn: 'Read the current explanation aloud; click again to stop.',
+  pipReadBtn: 'Read the current explanation aloud; click again to stop.',
   timerBtn: 'Start or stop a timebox for this session.',
   reexplainBtn: 'Explain the captured code selection again.',
   visualiseBtn: 'Build diagrams from the current editor selection.',
@@ -95,12 +95,13 @@ export const LEARN_BODY = withControlHelp(`
     <div class="topGrid">
       <button id="explainBtn">Select</button>
       <button id="markBtn" title="Keep this idea in Review so you can practise it later">Keep</button>
-      <button id="speakBtn">Read</button>
+      <button id="aiBtn">AI</button>
     </div>
     <div class="timerGrid">
       <span class="timerLabel">Timebox</span>
       <input id="timerMin" type="number" value="10" min="1" max="120" title="Minutes (session only, never saved)">
       <button id="timerBtn">Start</button>
+      <button id="pipReadBtn" class="pip-icon-btn" title="Read aloud (TTS)" aria-label="Read aloud">&#128266;</button>
       <span id="timerOut" class="muted" role="status" aria-live="polite"></span>
       <div class="quickIconRow">
         <button id="timerSoundBtn" class="iconBtn" title="Mute timebox completion sound" aria-label="Mute timebox completion sound" aria-pressed="false">&#9835;</button>
@@ -108,6 +109,39 @@ export const LEARN_BODY = withControlHelp(`
       </div>
     </div>
   </section>
+
+  <div class="pip-ai-lab-container" id="pipAiLab">
+    <div class="pip-ai-lab-header">
+      <div class="pip-ai-lab-title-row">
+        <span class="pip-ai-lab-title">&#129514; AI Lab &middot; 15m Micro-Lesson &amp; Experiment</span>
+        <select id="pipModelSelector" class="pip-select" title="Active Ollama Model">
+          <option value="qwen2.5-coder:14b">Loading models&hellip;</option>
+        </select>
+      </div>
+      <div id="pipModelMetrics" class="pip-metrics-bar" hidden>
+        <span id="pipMetricTps">-- tok/s</span> &middot; <span id="pipMetricLatency">-- ms</span>
+      </div>
+    </div>
+
+    <div class="pip-ai-lab-input-row">
+      <input
+        type="text"
+        id="pipAiLabInput"
+        class="pip-input"
+        placeholder="Ask AI theory or type a PIP code hack (15m lesson)&hellip;"
+      />
+      <button id="pipAiLabSubmit" class="pip-btn pip-btn-primary">Explore</button>
+    </div>
+
+    <div class="pip-ai-lab-chips">
+      <button type="button" class="pip-chip" data-query="Explain the Pink Elephant problem and why negative prompts fail in 7B/14B models">Pink Elephant Trap</button>
+      <button type="button" class="pip-chip" data-query="Compare Actor-Critic RL vs Model-Free Q-Learning in code assistants">Actor-Critic vs Q-Learning</button>
+      <button type="button" class="pip-chip" data-query="How do Attention Heads and Temperature affect AST generation?">Attention &amp; Softmax</button>
+      <button type="button" class="pip-chip" data-query="Compare how Qwen 1.5B vs DeepSeek 8B reasoning tokens approach debugging">Test-Time Compute</button>
+    </div>
+
+    <div id="pipAiLabOutput" class="pip-ai-lab-output" hidden></div>
+  </div>
 
   <nav class="a2uiBar" role="tablist" aria-label="Workspace mode">
     <button class="a2uiBtn isActive" data-mode="solve">Solve</button>

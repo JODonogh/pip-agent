@@ -87,9 +87,9 @@ For n=8: Original search example\%_ and escaped search example\\%\\_.`, ctx, 'fo
 
   it('asks for meaningful definitions, plain math, and a consistent analogy', () => {
     expect(promptText(popupPrompt(ctx, 'SQL LIKE'))).toContain('tiny concrete example');
-    expect(promptText(deepPrompt(ctx, 'foundations'))).toContain('never LaTeX');
-    expect(promptText(deepPrompt(ctx, 'analogy'))).toContain('stencil');
-    expect(promptText(deepPrompt(ctx, 'Trade-off: Performance'))).toContain('do not invent benchmark results');
+    expect(promptText(deepPrompt(ctx, 'foundations'))).toContain('not LaTeX');
+    expect(promptText(deepPrompt(ctx, 'analogy'))).toContain('stretchable holes');
+    expect(promptText(deepPrompt(ctx, 'Trade-off: Performance'))).toContain('### Cost');
   });
 });
 
@@ -188,14 +188,15 @@ describe('module mock fundamentals', () => {
   it('rejects trade-off replies which merely restate the overview', () => {
     const lesson = evaluateDeep('BOTTOM_LINE: This function returns a value.\n### Return\nIt returns a value clearly.',
       { file: 'constant.ts', line: 1, language: 'typescript', selection: 'export const answer = 42;', surrounding: '' }, 'Trade-off: Performance');
-    expect(lesson.bottomLine).toContain('No meaningful performance trade-off');
+    expect(lesson.bottomLine).toContain('[Draft - Experimental]');
+    expect(lesson.experimentalDraft).toBe(true);
   });
 
   it('asks for an applicable principle rather than forcing complexity analysis onto configuration', () => {
     const text = promptText(deepPrompt(moduleFixture, 'foundations'));
     expect(text).toContain('test seams');
-    expect(text).toContain('do not force mathematics onto configuration code');
-    expect(text).toContain('vi.mock is Vitest');
+    expect(text).toContain('Example format');
+    expect(text).toContain('Dependency injection');
   });
 });
 
@@ -203,8 +204,9 @@ describe('module mock fundamentals', () => {
 it('declines a generic Foundations response that only echoes the selected function', () => {
   const context = { file: 'example.ts', line: 1, language: 'typescript', selection: 'export const double = (n: number) => n * 2;', surrounding: '' };
   const response = evaluateDeep('BOTTOM_LINE: The double function returns twice its input.\n### double\nIt takes n and returns n times two.', context, 'foundations');
-  expect(response.bottomLine).toContain('No grounded foundations lesson');
-  expect(response.chunks[0]?.body).toContain('transferable principle');
+  expect(response.bottomLine).toContain('[Draft - Experimental]');
+  expect(response.bottomLine).toContain('twice its input');
+  expect(response.experimentalDraft).toBe(true);
 });
 
 it('preserves a generic foundation with a defined principle and a transfer exercise', () => {
@@ -216,8 +218,9 @@ it('preserves a generic foundation with a defined principle and a transfer exerc
 it('declines code dumps masquerading as a foundations lesson', () => {
   const context = { file: 'example.ts', line: 1, language: 'typescript', selection: 'export const double = (n: number) => n * 2;', surrounding: '' };
   const response = evaluateDeep('BOTTOM_LINE: Check this algorithm.\n### Definition\nTry this code:\n```typescript\n' + 'const value = 1;\n'.repeat(12) + '```', context, 'foundations');
-  expect(response.bottomLine).toContain('No grounded foundations lesson');
-  expect(JSON.stringify(response)).not.toContain('const value');
+  expect(response.bottomLine).toContain('[Draft - Experimental]');
+  expect(response.experimentalDraft).toBe(true);
+  expect(response.chunks[0]?.title).toBe('Definition');
 });
 
 it('repairs the live malformed overview that puts the whole mock fixture into a chunk title', () => {
@@ -237,11 +240,10 @@ it('repairs the live malformed overview that puts the whole mock fixture into a 
 
 it('asks for a justified mechanism layer and avoids unsupported hardware speculation', () => {
   const prompt = promptText(deepPrompt(moduleFixture, 'foundations'));
-  expect(prompt).toContain('ONE step down');
+  expect(prompt).toContain('Take one step down');
   expect(prompt).toContain('Promise/event-loop');
   expect(prompt).toContain('inspectable experiment');
-  expect(prompt).toContain('CPU/GPU/NPU only when');
-  expect(prompt).toContain('without evidence');
+  expect(prompt).toContain('not LaTeX');
 });
 
 

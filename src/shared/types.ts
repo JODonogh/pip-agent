@@ -10,10 +10,20 @@ export interface ProviderResult {
   model: string;
   /** True when the deterministic offline fallback produced this. */
   fromMock: boolean;
+  /** End-to-end request time (Ollama round-trip). */
+  latencyMs?: number;
+  /** Completion tokens generated (`eval_count` from Ollama). */
+  evalCount?: number;
+  /** Nanoseconds spent generating completion tokens (`eval_duration`). */
+  evalDuration?: number;
+  /** Derived from evalCount and evalDuration when Ollama reports both. */
+  tokensPerSecond?: number;
 }
 
 export interface ModelProvider {
   chat(messages: readonly ChatMessage[], model: string, maxTokens?: number): Promise<ProviderResult>;
+  /** Locally pulled Ollama model names; `['mock']` when the server is unreachable. */
+  getInstalledModels(): Promise<string[]>;
 }
 
 export interface CodeContext {
@@ -34,6 +44,8 @@ export interface Explanation {
   chunks: Chunk[];
   /** Evaluator had to cut/repair the raw model output. */
   repaired: boolean;
+  /** Model draft kept for comparison when a quality guard would have replaced it. */
+  experimentalDraft?: boolean;
 }
 
 export type LearningLayer = 'data' | 'frontend' | 'backend';

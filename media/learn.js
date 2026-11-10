@@ -48,6 +48,7 @@ function renderSolverSelection() {
 let duckPending = null;
 let duckSequence = 0;
 let speaking = false;
+let aiLabPending = false;
 let timer = null;
 let remaining = 0;
 
@@ -66,7 +67,7 @@ function describeControl(element, description) {
   if (element.tagName?.toLowerCase() === 'summary') return element; // expandable sections carry no tooltip
   const label = String(element.textContent || '').replace(/\s+/g, ' ').trim();
   // A visible text label already says what a button does; only icon-only controls get a tooltip.
-  if (!element.classList?.contains('iconBtn') && /[\p{L}]/u.test(label) && !description) return element;
+  if (!element.classList?.contains('iconBtn') && !element.classList?.contains('pip-icon-btn') && /[\p{L}]/u.test(label) && !description) return element;
   const descriptions = {
     Ask: 'Ask a follow-up about this idea and its supporting code.',
     'How to spot this': 'Learn the visible clue, alternative explanations, and a test you can reuse.',
@@ -81,7 +82,7 @@ function describeControl(element, description) {
   const help = description || element.title || element.getAttribute?.('data-pip-tooltip') || descriptions[label] ||
     (element.tagName.toLowerCase() === 'summary' ? `Expand ${label} to explore this part of the explanation.` : `Use ${label} for the current code or idea.`);
   if (help) { if (element.hasAttribute?.('data-pip-tooltip')) element.setAttribute('data-pip-tooltip', help); else element.title = help; }
-  if ((element.classList?.contains('iconBtn') || !/[\p{L}]/u.test(label)) && !element.getAttribute?.('aria-label')) element.setAttribute('aria-label', help);
+  if ((element.classList?.contains('iconBtn') || element.classList?.contains('pip-icon-btn') || !/[\p{L}]/u.test(label)) && !element.getAttribute?.('aria-label')) element.setAttribute('aria-label', help);
   return element;
 }
 function describeControls(root = document) {
@@ -1322,6 +1323,27 @@ window.addEventListener('message', (event) => {
     renderSummaryCards();
   } else if (msg.type === 'stat') {
     if ($('stats')) $('stats').textContent = msg.text;
+    if (msg.tokensPerSecond != null || msg.latencyMs != null) {
+      updateModelMetrics(msg);
+      if (aiLabPending) refreshAiLabTelemetry(msg);
+    }
+  } else if (msg.type === 'availableModels') {
+    fillModelSelector(msg.models || [], msg.selected);
+  } else if (msg.type === 'aiLabTelemetry') {
+    updateModelMetrics(msg);
+    if (aiLabPending) refreshAiLabTelemetry(msg);
+  } else if (msg.type === 'aiLabReply') {
+    renderAiLabReply(msg);
+  } else if (msg.type === 'aiLabError') {
+    setAiLabLoading(false);
+    const out = $('pipAiLabOutput');
+    if (!out) return;
+    out.hidden = false;
+    out.replaceChildren();
+    const err = document.createElement('p');
+    err.className = 'pip-ai-lab-error';
+    err.textContent = msg.text || 'AI Lab request failed.';
+    out.appendChild(err);
   }
 });
 
@@ -1798,24 +1820,192 @@ on('explainBtn', 'click', () => {
 on('reexplainBtn', 'click', () => vscode.postMessage({ type: 'explain' }));
 on('helpBtn', 'click', () => vscode.postMessage({ type: 'help' }));
 on('markBtn', 'click', () => vscode.postMessage({ type: 'mark', term: current.term, bottomLine: current.bottomLine }));
-on('speakBtn', 'click', (e) => {
+function setReadAloudState(active) {
+  speaking = active;
+  const btn = $('pipReadBtn');
+  if (!btn) return;
+  btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+  btn.textContent = active ? '\u23F9' : '\uD83D\uDD0A';
+  const label = active ? 'Stop reading aloud' : 'Read aloud (TTS)';
+  btn.title = label;
+  btn.setAttribute('aria-label', label);
+}
+on('pipReadBtn', 'click', () => {
   if (speaking) {
     vscode.postMessage({ type: 'stopSpeak' });
-    speaking = false;
-    e.target.textContent = 'Read';
+    setReadAloudState(false);
     return;
   }
   if (current.bottomLine) {
     vscode.postMessage({ type: 'speak', text: current.bottomLine, voice: $('voiceSelect')?.value || '' });
-    speaking = true;
-    e.target.textContent = 'Stop reading';
-    setTimeout(() => {
-      speaking = false;
-      const btn = $('speakBtn');
-      if (btn) btn.textContent = 'Read';
-    }, 30000);
+    setReadAloudState(true);
+    setTimeout(() => setReadAloudState(false), 30000);
   }
 });
+
+function fillModelSelector(models, selected) {
+  const select = $('pipModelSelector');
+  if (!select || !Array.isArray(models) || !models.length) return;
+  const prior = selected || select.value;
+  select.replaceChildren();
+  for (const name of models) {
+    const opt = document.createElement('option');
+    opt.value = name;
+    opt.textContent = name;
+    select.appendChild(opt);
+  }
+  if (prior && [...select.options].some((o) => o.value === prior)) select.value = prior;
+}
+function updateModelMetrics(metrics = {}) {
+  const bar = $('pipModelMetrics');
+  if (!bar) return;
+  const { tokensPerSecond, latencyMs } = metrics;
+  if (tokensPerSecond == null && latencyMs == null) return;
+  bar.hidden = false;
+  if ($('pipMetricTps') && tokensPerSecond != null) $('pipMetricTps').textContent = `${Number(tokensPerSecond).toFixed(1)} tok/s`;
+  if ($('pipMetricLatency') && latencyMs != null) $('pipMetricLatency').textContent = `${Math.round(latencyMs)} ms`;
+}
+function formatAiLabTelemetry(metrics = {}) {
+  const bits = [];
+  if (metrics.model) bits.push(metrics.model);
+  if (metrics.tokensPerSecond != null) bits.push(`${Number(metrics.tokensPerSecond).toFixed(1)} tok/s`);
+  if (metrics.latencyMs != null) bits.push(`${Math.round(metrics.latencyMs)} ms round-trip`);
+  if (metrics.evalCount != null) bits.push(`${metrics.evalCount} eval tokens`);
+  return bits.length ? bits.join(' \u00b7 ') : '';
+}
+function refreshAiLabTelemetry(metrics = {}) {
+  const row = $('pipAiLabTelemetry');
+  const line = formatAiLabTelemetry(metrics);
+  if (!row || !line) return;
+  row.hidden = false;
+  row.textContent = line;
+}
+function aiLabPartRows(msg) {
+  if (Array.isArray(msg.parts) && msg.parts.length) {
+    return msg.parts.slice(0, 3).map((part, index) => ({
+      title: part.title || `Part ${index + 1}`,
+      body: part.body || '',
+    }));
+  }
+  if (msg.explanation?.chunks?.length) {
+    return msg.explanation.chunks.slice(0, 3).map((chunk, index) => ({
+      title: chunk.title || `Part ${index + 1}`,
+      body: chunk.body || '',
+    }));
+  }
+  if (msg.card) {
+    const rows = [
+      { title: 'Core idea', body: msg.card.core },
+      { title: 'Mechanism', body: msg.card.mechanism },
+      { title: '15m experiment', body: msg.card.experiment },
+    ];
+    return rows.filter((row) => row.body);
+  }
+  return [];
+}
+function renderAiLabReply(msg) {
+  setAiLabLoading(false);
+  const out = $('pipAiLabOutput');
+  if (!out) return;
+  out.hidden = false;
+  out.classList.remove('is-pulsing');
+  out.removeAttribute('aria-busy');
+  out.replaceChildren();
+  const telemetry = { ...msg.telemetry, ...msg };
+  if (telemetry.tokensPerSecond != null || telemetry.latencyMs != null) updateModelMetrics(telemetry);
+  const headline = msg.headline || msg.explanation?.bottomLine || msg.bottomLine || '';
+  const parts = aiLabPartRows(msg);
+  if (!headline && !parts.length && msg.text) {
+    out.textContent = msg.text;
+    refreshAiLabTelemetry(telemetry);
+    return;
+  }
+  const card = document.createElement('article');
+  card.className = 'pip-ai-lab-card';
+  if (headline) {
+    const head = document.createElement('div');
+    head.className = 'pip-ai-lab-card-head';
+    head.appendChild(rich(headline, new Set()));
+    card.appendChild(head);
+  }
+  const body = document.createElement('div');
+  body.className = 'pip-ai-lab-card-parts';
+  for (const part of parts) {
+    const section = document.createElement('section');
+    section.className = 'pip-ai-lab-part';
+    const title = document.createElement('h4');
+    title.className = 'pip-ai-lab-part-title';
+    title.textContent = part.title;
+    const copy = document.createElement('div');
+    copy.className = 'pip-ai-lab-part-body';
+    copy.appendChild(rich(part.body, new Set()));
+    section.append(title, copy);
+    body.appendChild(section);
+  }
+  card.appendChild(body);
+  out.appendChild(card);
+  const telem = document.createElement('div');
+  telem.id = 'pipAiLabTelemetry';
+  telem.className = 'pip-ai-lab-telemetry';
+  telem.hidden = !formatAiLabTelemetry(telemetry);
+  telem.textContent = formatAiLabTelemetry(telemetry);
+  out.appendChild(telem);
+}
+function setAiLabLoading(active) {
+  aiLabPending = active;
+  const out = $('pipAiLabOutput');
+  const submit = $('pipAiLabSubmit');
+  if (submit) submit.disabled = active;
+  document.querySelectorAll('.pip-chip').forEach((chip) => { chip.disabled = active; });
+  if (!out) return;
+  if (!active) {
+    out.classList.remove('is-pulsing');
+    out.removeAttribute('aria-busy');
+    return;
+  }
+  out.hidden = false;
+  out.classList.add('is-pulsing');
+  out.setAttribute('aria-busy', 'true');
+  out.replaceChildren();
+  const pending = document.createElement('p');
+  pending.className = 'pip-ai-lab-pending';
+  pending.textContent = 'Exploring with your local model\u2026';
+  const inline = document.createElement('div');
+  inline.id = 'pipAiLabTelemetry';
+  inline.className = 'pip-ai-lab-telemetry';
+  inline.hidden = true;
+  out.append(pending, inline);
+  $('pipModelMetrics')?.removeAttribute('hidden');
+}
+function submitAiLabQuery(raw) {
+  const query = String(raw || '').trim();
+  if (!query || aiLabPending) return;
+  setAiLabLoading(true);
+  vscode.postMessage({
+    type: 'askAiLab',
+    query,
+    model: $('pipModelSelector')?.value || '',
+  });
+}
+on('pipAiLabSubmit', 'click', () => submitAiLabQuery($('pipAiLabInput')?.value));
+on('pipAiLabInput', 'keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    submitAiLabQuery(e.target.value);
+  }
+});
+document.querySelectorAll('.pip-chip').forEach((chip) => {
+  chip.addEventListener('click', () => {
+    const query = chip.getAttribute('data-query') || '';
+    const input = $('pipAiLabInput');
+    if (input) input.value = query;
+    submitAiLabQuery(query);
+  });
+});
+on('pipModelSelector', 'change', () => {
+  vscode.postMessage({ type: 'setActiveModel', model: $('pipModelSelector')?.value || '' });
+});
+vscode.postMessage({ type: 'getAvailableModels' });
 function submitDuck() {
   const input = $('duckInput');
   const statement = input.value.trim();

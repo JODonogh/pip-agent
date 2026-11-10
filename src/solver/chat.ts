@@ -171,7 +171,7 @@ export function formatCoach(
       doCaveat && missing.length
         ? `\n(Unverified here: ${missing.join(', ')} — not found in the searched files.)`
         : '';
-    return `${short}${caveat}\n${followUp}\n`;
+    return `${short}${caveat}\n${followUp}\nLearn · Visualise · Ideate · Review\n`;
   }
   if (mode === 'debug') {
     const items = [...raw.matchAll(/^\s*H:\s*(.+?)\s*\|\s*CHECK:\s*(.+)$/gim)].slice(0, 3).map((match) => {

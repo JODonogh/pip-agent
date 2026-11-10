@@ -1,3 +1,4 @@
+import { logEvaluatorDiagnostic } from '../platform/diagnostics';
 import type { CodeContext, Explanation } from './types';
 
 const CHUNK_WORD_CAP = 60;
@@ -50,6 +51,11 @@ export function evaluateExplanation(raw: string): Explanation {
   flush();
 
   if (!bottomLine) {
+    logEvaluatorDiagnostic(
+      'evaluateExplanation',
+      'Missing BOTTOM_LINE in model output; placeholder applied',
+      raw.slice(0, 400).replace(/\s+/g, ' '),
+    );
     bottomLine = 'The model did not lead with a bottom line — open a chunk below.';
     repaired = true;
   }
@@ -72,6 +78,58 @@ export function evaluateExplanation(raw: string): Explanation {
     repaired = true;
   }
   return { bottomLine, chunks: capped, repaired };
+}
+
+export interface AiLabCard {
+  concept: string;
+  wherePip: string;
+  experiment: string;
+}
+
+/** Remove chain-of-thought wrappers so DeepSeek-R1 style output fits the 3-part card. */
+export function stripModelThinking(raw: string): string {
+  return raw
+    .replace(/<think>[\s\S]*?<\/redacted_thinking>/gi, '')
+    .replace(/[\s\S]*?<\/think>/gi, '')
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .trim();
+}
+
+/** Parse the AI Lab 3-part micro-lesson contract from model markdown. */
+export function parseAiLabCard(raw: string): AiLabCard {
+  const text = stripModelThinking(raw);
+  const result: AiLabCard = { concept: '', wherePip: '', experiment: '' };
+  const sections: Array<{ key: keyof AiLabCard; marker: RegExp }> = [
+    { key: 'concept', marker: /^#{1,3}\s*1\.\s*The AI Concept/i },
+    { key: 'wherePip', marker: /^#{1,3}\s*2\.\s*How PIP/i },
+    { key: 'experiment', marker: /^#{1,3}\s*3\.\s*15-Minute/i },
+  ];
+  const bodies: Record<keyof AiLabCard, string[]> = { concept: [], wherePip: [], experiment: [] };
+  let current: keyof AiLabCard | null = null;
+  let inFence = false;
+  for (const line of text.split('\n')) {
+    const trimmed = line.trim();
+    if (/^```/.test(trimmed)) {
+      inFence = !inFence;
+      if (current) bodies[current].push(line);
+      continue;
+    }
+    if (!inFence) {
+      const hit = sections.find((section) => section.marker.test(trimmed));
+      if (hit) {
+        current = hit.key;
+        continue;
+      }
+    }
+    if (current) bodies[current].push(line);
+  }
+  for (const key of Object.keys(result) as Array<keyof AiLabCard>) {
+    result[key] = bodies[key].join('\n').trim();
+  }
+  if (!result.concept && !result.wherePip && !result.experiment && text) {
+    result.concept = text;
+  }
+  return result;
 }
 
 /** Quick-fire contract: exactly one sentence out, whatever the model said. */

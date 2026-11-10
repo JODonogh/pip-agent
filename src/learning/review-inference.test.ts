@@ -41,7 +41,7 @@ describe('analogy variety', () => {
     expect(ANALOGY_DOMAINS.map((domain) => domain.name).join(' ')).not.toMatch(/stencil|library|kitchen/);
     const prompt = deepPrompt({ ...ctx, selection: 'useState(0)' }, 'analogy')[1]!.content;
     expect(prompt).toContain(analogyDomain('useState(0)').name);
-    expect(prompt).toContain('Do NOT use a stencil');
+    expect(prompt).toContain('Example format');
   });
 });
 

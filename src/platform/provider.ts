@@ -1,5 +1,24 @@
 import { assertLocalhost, type ChatMessage, type ModelProvider, type ProviderResult } from '../shared/types';
 
+type OllamaEvalPayload = {
+  eval_count?: number;
+  eval_duration?: number;
+};
+
+function providerInferenceMetrics(
+  started: number,
+  stats: OllamaEvalPayload,
+): Pick<ProviderResult, 'latencyMs' | 'evalCount' | 'evalDuration' | 'tokensPerSecond'> {
+  const latencyMs = Date.now() - started;
+  const evalCount = stats.eval_count;
+  const evalDuration = stats.eval_duration;
+  let tokensPerSecond: number | undefined;
+  if (evalCount != null && evalDuration != null && evalDuration > 0) {
+    tokensPerSecond = evalCount / (evalDuration / 1e9);
+  }
+  return { latencyMs, evalCount, evalDuration, tokensPerSecond };
+}
+
 /** Talks to a local Ollama server. Enforces localhost — nothing leaves this machine. */
 export class OllamaProvider implements ModelProvider {
   private readonly base: URL;
@@ -10,7 +29,28 @@ export class OllamaProvider implements ModelProvider {
     this.fetchFn = fetchFn;
   }
 
+  async getInstalledModels(): Promise<string[]> {
+    const url = new URL('/api/tags', this.base);
+    try {
+      const res = await this.fetchFn(url, {
+        method: 'GET',
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) {
+        return ['mock'];
+      }
+      const data = (await res.json()) as { models?: Array<{ name?: string }> };
+      const names = (data.models ?? [])
+        .map((m) => m.name)
+        .filter((name): name is string => typeof name === 'string' && name.length > 0);
+      return names.length > 0 ? names : ['mock'];
+    } catch {
+      return ['mock'];
+    }
+  }
+
   async chat(messages: readonly ChatMessage[], model: string, maxTokens = 380, signal?: AbortSignal, contextSize = 4096): Promise<ProviderResult> {
+    const started = Date.now();
     const url = new URL('/api/chat', this.base);
     const res = await this.fetchFn(url, {
       method: 'POST',
@@ -29,12 +69,12 @@ export class OllamaProvider implements ModelProvider {
     if (!res.ok) {
       throw new Error(`Ollama returned ${res.status}`);
     }
-    const data = (await res.json()) as { message?: { content?: string } };
+    const data = (await res.json()) as { message?: { content?: string } } & OllamaEvalPayload;
     const text = data.message?.content?.trim() ?? '';
     if (!text) {
       throw new Error('Ollama returned an empty response');
     }
-    return { text, model, fromMock: false };
+    return { text, model, fromMock: false, ...providerInferenceMetrics(started, data) };
   }
 
   /** Streaming variant: onText receives the accumulated text as tokens arrive. */
@@ -45,6 +85,7 @@ export class OllamaProvider implements ModelProvider {
     onText: (accumulated: string) => void,
     signal?: AbortSignal,
   ): Promise<ProviderResult> {
+    const started = Date.now();
     const url = new URL('/api/chat', this.base);
     const res = await this.fetchFn(url, {
       method: 'POST',
@@ -65,6 +106,7 @@ export class OllamaProvider implements ModelProvider {
     const decoder = new TextDecoder();
     let buffer = '';
     let accumulated = '';
+    let streamEval: OllamaEvalPayload = {};
     for (;;) {
       const { done, value } = await reader.read();
       if (done) {
@@ -78,11 +120,17 @@ export class OllamaProvider implements ModelProvider {
           continue;
         }
         try {
-          const parsed = JSON.parse(line) as { message?: { content?: string } };
+          const parsed = JSON.parse(line) as { message?: { content?: string }; done?: boolean } & OllamaEvalPayload;
           const piece = parsed.message?.content ?? '';
           if (piece) {
             accumulated += piece;
             onText(accumulated);
+          }
+          if (parsed.done || parsed.eval_count != null || parsed.eval_duration != null) {
+            streamEval = {
+              eval_count: parsed.eval_count ?? streamEval.eval_count,
+              eval_duration: parsed.eval_duration ?? streamEval.eval_duration,
+            };
           }
         } catch {
           // Partial JSON line — wait for more bytes.
@@ -92,7 +140,7 @@ export class OllamaProvider implements ModelProvider {
     if (!accumulated.trim()) {
       throw new Error('Ollama streamed an empty response');
     }
-    return { text: accumulated.trim(), model, fromMock: false };
+    return { text: accumulated.trim(), model, fromMock: false, ...providerInferenceMetrics(started, streamEval) };
   }
 }
 
@@ -101,6 +149,10 @@ export class OllamaProvider implements ModelProvider {
  * (popup → evaluator → flashcards) works for $0 when Ollama is stopped.
  */
 export class MockProvider implements ModelProvider {
+  async getInstalledModels(): Promise<string[]> {
+    return ['mock'];
+  }
+
   async chat(messages: readonly ChatMessage[], model: string): Promise<ProviderResult> {
     const user = messages.find((m) => m.role === 'user')?.content ?? '';
     const intent = /\[INTENT:(\w+)\]/.exec(user)?.[1] ?? 'explain';

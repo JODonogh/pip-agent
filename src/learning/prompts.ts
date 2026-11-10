@@ -28,6 +28,24 @@ export function analogyDomain(selection: string): (typeof ANALOGY_DOMAINS)[numbe
 
 export type ExplainStyle = 'plain' | 'analogy' | 'foundations';
 
+const EXPLAIN_FEW_SHOT =
+  'Example format and tone:\n' +
+  'BOTTOM_LINE: Early return on blank input keeps downstream SQL from seeing an empty search string.\n' +
+  '### Blank input guard\nThe method returns null before any wildcard logic runs.\n' +
+  '### Wildcard escapes\nPercent and underscore literals are escaped so LIKE treats them as characters.\n';
+
+const DEEP_FOUNDATIONS_FEW_SHOT =
+  'Example format:\n' +
+  'BOTTOM_LINE: Dependency injection makes the transport seam explicit.\n' +
+  '### Test seam\nThe `fetch` option is where a test can substitute behaviour without changing client logic.\n' +
+  '### Try it elsewhere\nPick a caller and list what you would inject to assert request shape.\n';
+
+const DEEP_ANALOGY_FEW_SHOT =
+  'Example format:\n' +
+  'BOTTOM_LINE: Think of a stencil with two stretchable holes and one fixed cut-out.\n' +
+  '### Map the code\nPercent is the stretchable hole; an escaped underscore is the fixed mark.\n' +
+  '### Limit\nThe stencil explains pattern matching, not who may run the query.\n';
+
 const STYLE_RULES: Record<ExplainStyle, string> = {
   plain: 'Explain plainly and directly. No analogy unless the code is genuinely confusing without one.',
   analogy:
@@ -93,11 +111,9 @@ export function explainPrompt(
           ? 'This is a JUnit class with multiple @Test methods. One chunk for shared setup only (@BeforeEach, mocks, fixtures). Then one short chunk per @Test: what scenario it checks and what would fail — skip boilerplate imports and repeated arrange blocks. Point the engineer to the Test map to open one method before asking for more detail. '
           : '') +
         'Explain behaviour and uncertainty without repeating the selection line by line. For vi.mock identify Vitest, not Jest. ' +
-        'A callback such as fetch: request => fetch(request) delegates to the current fetch implementation; ' +
-        'module replacement alone does not establish simulated networking.\n' +
-        `${chunkCountRule}Chunk titles MUST name the actual parts of THIS code (e.g. "The 401 response", ` +
-        '"When this fires", "The exception type"). NEVER use generic titles: What it is, How it flows, ' +
-        'Worth learning, Watch out, Overview, Summary, Conclusion.\n' +
+        'A callback such as fetch: request => fetch(request) delegates to the current fetch implementation.\n' +
+        `${chunkCountRule}Name chunk titles after concrete parts of this code (methods, branches, responses).\n` +
+        `${EXPLAIN_FEW_SHOT}` +
         codeBlock(ctx),
     },
   ];
@@ -168,34 +184,31 @@ export function drillCheckPrompt(concept: Concept, answer: string, question = ''
 export function deepPrompt(ctx: CodeContext, kind: string, prior?: string): ChatMessage[] {
   const briefs: Record<string, string> = {
     analogy:
-      `Give an actual everyday analogy, not a summary. Use ONE domain only: ${analogyDomain(ctx.selection).name}. Do NOT use a stencil, library, librarian, shelves or kitchen. ` +
-      'Never mention history, inventors, years or origins; another section covers those. Start BOTTOM_LINE with the analogy itself. Map two concrete roles to code ' +
-      'and finish with one small question that helps the engineer transfer the idea. Do not switch domains. ' +
-      'For SQL LIKE wildcard escaping use a stencil: % and _ are holes; escaped symbols are literal printed marks. ' +
-      'Do not claim LIKE escaping by itself prevents SQL injection. ' +
-      'For test-module replacement, map the replaced module and any injected dependency separately; the limit must state what is not established.',
+      `Give an everyday analogy in ONE domain only: ${analogyDomain(ctx.selection).name}. ` +
+      `Start BOTTOM_LINE with the analogy, map two concrete roles to code, state one limit, and end with a transfer question.\n${DEEP_ANALOGY_FEW_SHOT}`,
     foundations:
-      'Teach one genuine computer-science, design or testing fundamental visible here. Define the principle, cite a concrete code detail, ' +
-      'explain why it matters, and give a small transfer exercise; do not repeat the overview or merely echo code. ' +
-      'For module mocks and injected callbacks, prefer test seams, dependency injection, indirection, asynchronous contracts or test isolation. ' +
-      'vi.mock is Vitest; a delegated fetch callback is not proof that networking is simulated. ' +
-      'Take ONE step down from the code to a justified mechanism: callback invocation, Promise/event-loop scheduling, memory ownership or I/O boundaries. ' +
-      'Add one why/how question or inspectable experiment that helps the engineer verify that mechanism. ' +
-      'Go down to CPU/GPU/NPU only when the selected operation justifies that hardware layer; do not invent devices, kernels, timings or hardware costs without evidence. ' +
-      'Only if the selection exposes an algorithm, explain time/space growth and the assumptions behind the bound. ' +
-      'A useful operation-count example defines n and counts n versus 2n; do not force mathematics onto configuration code. ' +
-      'Do not fabricate input/output strings or measured timings and call them mathematical examples. ' +
-      'Use plain text math such as 2 × n or n²; never LaTeX commands or escaped math delimiters. ' +
-      'Preserve literal backslashes in code examples. If complexity cannot be established from the excerpt, say what implementation is missing. ' +
-      'End with a reusable way to recognise the pattern.',
+      'Teach one computer-science, design or testing fundamental visible in this code: define the principle, cite a concrete detail, ' +
+      'and give a small transfer exercise. Prefer test seams, dependency injection, or event-loop/async boundaries when mocks appear. ' +
+      'Take one step down when justified (Promise/event-loop scheduling, memory ownership, I/O) and add one inspectable experiment. ' +
+      'Use plain math (2 × n), not LaTeX, when an algorithm justifies it.\n' +
+      DEEP_FOUNDATIONS_FEW_SHOT,
     roots:
-      'Use no analogy or metaphor and never write "think of it as"; another section covers analogies. Do NOT describe what the code does. Tell the historical origin of its key idea: a named person or ' +
-      'a year, the original problem, and one link to this selection. If you describe the feature, you have failed.',
+      'Tell the historical origin of the key idea: a named person or year, the original problem, and one link to this selection.\n' +
+      'Example:\n' +
+      'BOTTOM_LINE: SQL LIKE comes from early relational query languages standardising pattern predicates.\n' +
+      '### Origin\nDonald Chamberlin and Raymond Boyce developed SQL precursors in the early 1970s.\n' +
+      '### Link here\nThis excerpt uses LIKE as a selection predicate, not as a general string API.\n',
   };
   const normalizedKind = /^trade[- ]?off/i.test(kind) ? 'performance' : kind;
+  const performanceFewShot =
+    'Example format:\n' +
+    'BOTTOM_LINE: Two literal replace passes favour clarity over a single combined scan.\n' +
+    '### Benefit\nEach pass is easy to read and test in isolation.\n' +
+    '### Cost\nTwo passes visit more characters; measure on long inputs before merging.\n' +
+    '### When to choose\nPrefer clarity until profiling shows allocation cost matters.\n';
   const brief =
     briefs[normalizedKind] ??
-    `Explain a real trade-off grounded in THIS code: identify the choice, a benefit, a cost, and when one side is preferable. Do not repeat the overview. If this excerpt supports no meaningful performance comparison, say so instead of inventing a bottleneck; a relevant design or testing trade-off may be more useful. Connect the cost to one justified runtime, memory or I/O mechanism and give one inspectable why/how question or experiment. Discuss CPU/GPU/NPU only if the selected operation establishes that layer; do not invent hardware or hardware-cost facts. Name a check or measurement; do not invent benchmark results. Use plain text math, no LaTeX.`;
+    `Explain a trade-off grounded in THIS code: name the choice, a benefit, a cost, and when each side fits. Name a check the engineer can run.\n${performanceFewShot}`;
   const store = prior ? `\n${prior}\n` : '\n';
   return [
     { role: 'system', content: BASE_RULES },
@@ -277,6 +290,32 @@ export function drillPrompt(concept: Concept): ChatMessage[] {
         `[INTENT:drill]\n${drillFocus(concept)}Write ONE short drill question (no answer) that tests real understanding of this concept ` +
         `the engineer marked. Concept: "${concept.term}". What they were told: "${concept.bottomLine}" ` +
         `(from ${concept.file}:${concept.line}). Ask them to explain a mechanism, predict an edge case, or justify a design choice using this idea. Connect to one relevant CS, testing or software design principle; do not invent missing system behaviour or ask for memorised wording.`,
+    },
+  ];
+}
+
+/** 15-minute micro-lesson for the AI Lab — three fixed sections grounded in Agent PIP source. */
+export function aiLabPrompt(query: string, modelName: string, ctx?: CodeContext | null): ChatMessage[] {
+  return [
+    {
+      role: 'system',
+      content:
+        'You are an AI research scientist and principal engineer mentoring a developer on LLM internals, prompt engineering, and agent architecture through their own VS Code extension codebase (Agent PIP). ' +
+        'Answer the user question concisely in EXACTLY this 3-part markdown format:\n\n' +
+        '### 1. The AI Concept (60 Seconds)\n' +
+        '<Crisp conceptual definition under 80 words: attention heads, loss, tokenization, reasoning tokens, temperature, or similar. Use plain words, not filler.>\n\n' +
+        '### 2. How PIP Demonstrates or Violates This\n' +
+        '<Cite a relevant Agent PIP file and path (e.g. src/agents/prompts.ts, src/learning/learning-quality.ts, src/platform/provider.ts, src/shared/evaluator.ts) and explain where this codebase demonstrates or violates the concept in concrete terms.>\n\n' +
+        '### 3. 15-Minute Code Experiment\n' +
+        '<Give ONE concrete experiment the user can try in Agent PIP right now: a 5–10 line change or prompt tweak they can run and observe. No multi-hour projects.>',
+    },
+    {
+      role: 'user',
+      content:
+        `Active Model: ${modelName}\nQuestion: ${query}\n` +
+        (ctx
+          ? `Currently open file: ${ctx.file}:${ctx.line}\n\`\`\`\n${ctx.selection.slice(0, 1000)}\n\`\`\``
+          : 'No active editor selection.'),
     },
   ];
 }

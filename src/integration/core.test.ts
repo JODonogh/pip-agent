@@ -13,11 +13,14 @@ import {
   codeAnchors,
   groundedInCode,
   localImprovements,
+  parseAiLabCard,
   parseImprovements,
   parsePocIdeas,
   parseSolver,
+  stripModelThinking,
 } from '../shared/evaluator';
 import { explainPrompt, improveCodebasePrompt, pocIdeasPrompt } from '../agents/prompts';
+import { aiLabPrompt } from '../learning/prompts';
 import { assertLocalhost } from '../shared/types';
 import { MockProvider, OllamaProvider } from '../platform/provider';
 import {
@@ -48,12 +51,47 @@ describe('OllamaProvider', () => {
     const fetchFn = vi.fn(async () => ({
       ok: true,
       status: 200,
-      json: async () => ({ message: { content: 'BOTTOM_LINE: hi' } }),
+      json: async () => ({
+        message: { content: 'BOTTOM_LINE: hi' },
+        eval_count: 40,
+        eval_duration: 2e9,
+      }),
     })) as unknown as typeof fetch;
     const provider = new OllamaProvider('http://127.0.0.1:11434', fetchFn);
     const result = await provider.chat([{ role: 'user', content: 'x' }], 'mistral:latest');
     expect(result.text).toBe('BOTTOM_LINE: hi');
     expect(result.fromMock).toBe(false);
+    expect(result.evalCount).toBe(40);
+    expect(result.evalDuration).toBe(2e9);
+    expect(result.tokensPerSecond).toBe(20);
+    expect(result.latencyMs).toBeGreaterThanOrEqual(0);
+  });
+  it('lists installed models from /api/tags', async () => {
+    const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
+      const path = typeof input === 'string' ? input : input instanceof URL ? input.pathname : new URL(input.url).pathname;
+      if (path.endsWith('/api/tags')) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            models: [{ name: 'qwen2.5-coder:14b' }, { name: 'deepseek-r1:8b' }],
+          }),
+        };
+      }
+      throw new Error(`unexpected fetch: ${path}`);
+    }) as unknown as typeof fetch;
+    const provider = new OllamaProvider('http://127.0.0.1:11434', fetchFn);
+    await expect(provider.getInstalledModels()).resolves.toEqual([
+      'qwen2.5-coder:14b',
+      'deepseek-r1:8b',
+    ]);
+  });
+  it('falls back to mock when /api/tags is unreachable', async () => {
+    const fetchFn = vi.fn(async () => {
+      throw new Error('ECONNREFUSED');
+    }) as unknown as typeof fetch;
+    const provider = new OllamaProvider('http://127.0.0.1:11434', fetchFn);
+    await expect(provider.getInstalledModels()).resolves.toEqual(['mock']);
   });
   it('uses a larger context only when explicitly requested for source comparison', async () => {
     const bodies: any[] = [];
@@ -95,6 +133,39 @@ describe('evaluator', () => {
     expect(out.text.endsWith('?')).toBe(true);
     expect((out.text.match(/\?/g) ?? []).length).toBe(1);
   });
+  it('parseAiLabCard extracts all three markdown sections', () => {
+    const raw = [
+      '### 1. The AI Concept (60 Seconds)',
+      'Attention distributes weight across tokens.',
+      '### 2. How PIP Demonstrates or Violates This',
+      'src/platform/provider.ts records eval_count.',
+      '### 3. 15-Minute Code Experiment',
+      'Log tokensPerSecond after one explain call.',
+    ].join('\n');
+    const card = parseAiLabCard(raw);
+    expect(card.concept).toContain('Attention');
+    expect(card.wherePip).toContain('provider.ts');
+    expect(card.experiment).toContain('tokensPerSecond');
+  });
+  it('strips deepseek-style thinking blocks before parsing AI Lab cards', () => {
+    const raw = `<think>hidden chain</think>\n### 1. The AI Concept (60 Seconds)\nTokens.\n### 2. How PIP Demonstrates or Violates This\nprovider.ts\n### 3. 15-Minute Code Experiment\nAdd a log line.`;
+    expect(stripModelThinking(raw)).not.toContain('hidden chain');
+    const card = parseAiLabCard(raw);
+    expect(card.concept).toBe('Tokens.');
+    expect(card.wherePip).toContain('provider.ts');
+    expect(card.experiment).toContain('log line');
+  });
+  it('aiLabPrompt includes model, question, and optional selection', () => {
+    const msgs = aiLabPrompt('What is temperature?', 'qwen2.5-coder:14b', {
+      file: 'provider.ts', line: 1, language: 'typescript', selection: 'const x = 1;', surrounding: '',
+    });
+    expect(msgs).toHaveLength(2);
+    expect(msgs.every((message) => message.role === 'system' || message.role === 'user')).toBe(true);
+    expect(msgs[0]?.content).toContain('### 3. 15-Minute Code Experiment');
+    expect(msgs[1]?.content).toContain('Active Model: qwen2.5-coder:14b');
+    expect(msgs[1]?.content).toContain('const x = 1;');
+    expect(aiLabPrompt('solo question', 'mock', null)[1]?.content).toContain('No active editor selection.');
+  });
   it('mock provider explains deterministically', async () => {
     const mock = new MockProvider();
     const res = await mock.chat(
@@ -116,8 +187,8 @@ describe('no formulaic chunks + drill verdicts', () => {
       surrounding: '',
     });
     const text = prompt.map((m) => m.content).join('\n');
-    expect(text).toContain('NEVER use generic titles');
-    expect(text).not.toContain('titles like: What it is');
+    expect(text).toContain('Example format and tone');
+    expect(text).toContain('BOTTOM_LINE: Early return on blank input');
   });
   it('keeps a single-line SQL fragment scoped to LIKE/LOWER/ESCAPE, not the whole query', () => {
     const likeLine = `OR LOWER(p.partner_name) LIKE '%' || LOWER(CAST(:search AS TEXT)) || '%' ESCAPE '\\'`;

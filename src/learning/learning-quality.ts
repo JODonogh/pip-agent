@@ -1,3 +1,4 @@
+import { logEvaluatorDiagnostic, markExperimentalDraft } from '../platform/diagnostics';
 import { evaluateExplanation } from '../shared/evaluator';
 import { metaphorScaffold } from '../ideation/ideation';
 import { conceptualDbTheoryWithoutSchema } from '../solver/searcher';
@@ -73,6 +74,13 @@ export function guardExplanation(ctx: CodeContext, explanation: Explanation): Ex
     (chunk) => !mentionsUnsupported(`${chunk.title} ${chunk.body}`),
   );
   const dropped = kept.length !== explanation.chunks.length;
+  if (dropped) {
+    const removed = explanation.chunks
+      .filter((chunk) => mentionsUnsupported(`${chunk.title} ${chunk.body}`))
+      .map((chunk) => chunk.title)
+      .join('; ');
+    logEvaluatorDiagnostic('guardExplanation', 'Removed chunks not grounded in selection', removed.slice(0, 400));
+  }
   const bottomLineRaw = fix(explanation.bottomLine);
   const bottomLine =
     mentionsUnsupported(bottomLineRaw) && kept.length
@@ -134,7 +142,25 @@ export function glossaryDefinition(ctx: CodeContext | null, word: string, questi
   return null;
 }
 
+function likeAnalogyTeaching(): Explanation {
+  return {
+    bottomLine: 'Think of a stencil with stretchable holes for % and _; backslash marks literal cut-outs.',
+    chunks: [
+      {
+        title: 'Map the pattern',
+        body: '% is a stretchable hole and _ is a one-character hole; escaped symbols are fixed marks on the stencil.',
+      },
+      {
+        title: 'Where the analogy stops',
+        body: 'The stencil explains LIKE pattern matching only. Parameter binding keeps user input out of SQL syntax; wildcard escaping alone does not establish SQL injection protection.',
+      },
+    ],
+    repaired: true,
+  };
+}
+
 function analogyFallback(ctx: CodeContext): Explanation {
+  if (likeEscaping(ctx)) return likeAnalogyTeaching();
   const [mapping, exercise] = metaphorScaffold(ctx).split('\n');
   return { bottomLine: mapping ?? 'Read the code as any number of metaphors, whatever most suits the particular code sample or question given',
     chunks: [{ title: 'Try the mapping', body: exercise ?? '' }], repaired: true };
@@ -264,7 +290,7 @@ export function preparedDeep(ctx: CodeContext, kind: string): Explanation | null
   const moduleTeaching = moduleMockTeaching(ctx, kind);
   if (moduleTeaching) return moduleTeaching;
   if (!likeEscaping(ctx)) return null;
-  if (kind === 'analogy') return analogyFallback(ctx);
+  if (kind === 'analogy') return likeAnalogyTeaching();
   if (kind.toLowerCase().includes('performance')) return {
     bottomLine: 'Separate literal string replacements favour clarity; each pass can scan and allocate another string.',
     chunks: [
@@ -292,22 +318,26 @@ export function evaluateDeep(raw: string, ctx: CodeContext, kind: string): Expla
   const codeDump = [...raw.matchAll(/```[^\n]*\n([\s\S]*?)```/g)].some((match) => (match[1]?.trim().length ?? 0) > 120);
   if (kind === 'foundations' && (codeDump ||
       !/\b(dependency injection|test seam|test double|test isolation|indirection|inversion|contract|invariant|immutab|referential|complexity|algorithm|data structure|linear|logarith|recurs|hash|queue|stack|tree|closure|polymorph|encapsulat|concurren|atomic|transaction|serializ|ownership|event loop|idempoten|separation of concerns|subquery|semi-join|predicate|relational|query plan|index|three-valued|set-based|declarative)\w*/i.test(text) ||
-      !/\b(try|recognis|recogniz|apply|ask|check|contrast|compare|exercise|look for|use this|elsewhere|counterexample)\w*/i.test(text))) return {
-    bottomLine: 'No grounded foundations lesson is established from this selection.',
-    chunks: [{ title: 'What would make a principle useful', body: 'A foundation should define a transferable principle, point to the code that demonstrates it, and show how to test or apply it elsewhere. Show the complete operation and its call site before choosing an algorithmic, design, or testing lesson.' }],
-    repaired: true,
-  };
+      !/\b(try|recognis|recogniz|apply|ask|check|contrast|compare|exercise|look for|use this|elsewhere|counterexample)\w*/i.test(text))) {
+    const reason = codeDump
+      ? 'foundations guard: model returned a code dump instead of a principle lesson'
+      : 'foundations guard: missing transferable CS/design/testing vocabulary or transfer exercise';
+    return markExperimentalDraft(parsed, 'foundations-grounding', reason, `kind=${kind}`);
+  }
   if (kind === 'analogy' && (!(ANALOGY_DOMAINS.some((domain) => domain.words.test(text)) || /\b(stencil|library|kitchen|cook|book|mail|rail|desk|gate|recipe|sieve|assembly|post|theatre|stage|factory|prop|courier)\w*/i.test(text)) ||
       !/\b(like|analogy|treat|think of|picture|imagine|maps?|represents?|corresponds?|as if)\b/i.test(text) ||
       !/\b(limit|unlike|does not|doesn't|cannot|breaks down|only illustrates)\b/i.test(text))) return analogyFallback(ctx);
   if (/trade[- ]?off|performance/i.test(kind) && (
     !/\b(benefit|buys|clarity|readab|isolation|fidelity|saves|reduces)\w*/i.test(text) ||
     !/\b(cost|but|however|allocation|memory|latency|complexity|overhead|risk)\w*/i.test(text) ||
-    !/\b(when|if|unless|prefer|choose|measure|benchmark|unit|integration)\w*/i.test(text))) return {
-    bottomLine: 'No meaningful performance trade-off is established by this excerpt.',
-    chunks: [{ title: 'What would make a comparison useful', body: 'Identify two ways to achieve the same behaviour, state a benefit and a cost, then specify when that cost matters. A code description alone is not evidence of a bottleneck or a reason to optimise.' }],
-    repaired: true,
-  };
+    !/\b(when|if|unless|prefer|choose|measure|benchmark|unit|integration)\w*/i.test(text))) {
+    return markExperimentalDraft(
+      parsed,
+      'performance-tradeoff-grounding',
+      'trade-off guard: model reply lacks benefit/cost/when structure',
+      `kind=${kind}`,
+    );
+  }
   return parsed;
 }
 

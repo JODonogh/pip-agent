@@ -10,6 +10,7 @@ import {
   evaluateQuickFire,
   firstAppFrame,
   MAX_DEPTH,
+  parseAiLabCard,
   parseApproaches,
   parseDrillVerdict,
   codeAnchors,
@@ -54,6 +55,7 @@ import { buildIndex, deserializeIndex, hashText, semanticHits, serializeIndex, t
 import { embedTexts } from './platform/embeddings';
 import { buildDayReview, conceptsForLocalDay, localDateKey } from './learning/day-summary';
 import { extractKeywords } from './learning/keywords';
+import { setEvaluatorDiagnostics } from './platform/diagnostics';
 import { InferenceQueue } from './platform/inference-queue';
 import { fetchReference, topicFor, rootsWebPrompt, acceptRoots } from './platform/webroots';
 import { evaluateDeep, preparedDeep, guardExplanation, glossaryDefinition, evaluateLearningReview, dropEchoChunks, type LearningReview } from './learning/learning-quality';
@@ -72,6 +74,7 @@ import {
   drillCheckPrompt,
   drillPrompt,
   duckPrompt,
+  aiLabPrompt,
   explainPrompt,
   improveCodebasePrompt,
   verifierPrompt,
@@ -171,6 +174,7 @@ const TOKEN_CAPS: Record<string, number> = {
   challenge: 180,
   solver: 380,
   deep: 340,
+  aiLab: 520,
   diverge: 220,
   converge: 120,
   scamper: 200,
@@ -190,6 +194,12 @@ const TOKEN_CAPS: Record<string, number> = {
  * observability. All model traffic is localhost-only (enforced in provider).
  */
 export function activate(context: vscode.ExtensionContext): void {
+  if (typeof vscode.window.createOutputChannel === 'function') {
+    const diagnostics = vscode.window.createOutputChannel('Agent PIP Diagnostics');
+    context.subscriptions.push(diagnostics);
+    setEvaluatorDiagnostics((line) => diagnostics.appendLine(line));
+  }
+
   const store = new PipStore(context.globalState);
   const sidebar = new SidebarProvider(context.extensionUri, store);
   void listSpeakVoices();
@@ -321,11 +331,11 @@ export function activate(context: vscode.ExtensionContext): void {
     worker: string,
     modelSetting: 'pip.model' | 'pip.fastModel' | 'pip.creativeModel' | 'pip.reasoningModel',
     messages: ChatMessage[],
-    options: { priority?: 'foreground' | 'background'; signal?: AbortSignal; key?: string; onStart?: () => void; contextSize?: number } = {},
+    options: { priority?: 'foreground' | 'background'; signal?: AbortSignal; key?: string; onStart?: () => void; contextSize?: number; model?: string } = {},
   ): Promise<ProviderResult & { latencyMs: number }> => inference.run(async (signal) => {
     options.onStart?.();
     const config = vscode.workspace.getConfiguration();
-    const model = config.get<string>(modelSetting, '') || config.get<string>('pip.model', 'qwen2.5-coder:3b');
+    const model = options.model?.trim() || config.get<string>(modelSetting, '') || config.get<string>('pip.model', 'qwen2.5-coder:3b');
     const started = Date.now();
     // The configured model first; if it is not installed or fails, the fast default, then the offline mock.
     const provider = new OllamaProvider(config.get<string>('pip.ollamaUrl', 'http://127.0.0.1:11434'));
@@ -349,6 +359,10 @@ export function activate(context: vscode.ExtensionContext): void {
   const statLine = (r: ProviderResult & { latencyMs: number }, worker: string): Record<string, unknown> => ({
     type: 'stat',
     text: `${worker} · ${r.model}${r.fromMock ? ' (mock — Ollama not answering)' : ''} · ${r.latencyMs}ms · ~${estimateTokens(r.text)} tokens · $0.00 local`,
+    tokensPerSecond: r.tokensPerSecond,
+    latencyMs: r.latencyMs,
+    evalCount: r.evalCount,
+    model: r.model,
   });
 
   const captureContext = (): CodeContext | null => {
@@ -728,6 +742,70 @@ export function activate(context: vscode.ExtensionContext): void {
                   { id: PREMIUM_AMAN, label: 'Aman · premium' },
                 ],
           });
+          break;
+        }
+        case 'getAvailableModels': {
+          const config = vscode.workspace.getConfiguration();
+          const provider = new OllamaProvider(config.get<string>('pip.ollamaUrl', 'http://127.0.0.1:11434'));
+          const models = await provider.getInstalledModels();
+          const selected = String(message['model'] ?? '').trim() || config.get<string>('pip.model', 'qwen2.5-coder:3b');
+          transport.post({ type: 'availableModels', models, selected });
+          break;
+        }
+        case 'setActiveModel': {
+          const model = String(message['model'] ?? '').trim();
+          if (model) {
+            await vscode.workspace.getConfiguration().update('pip.model', model, vscode.ConfigurationTarget.Global);
+          }
+          break;
+        }
+        case 'askAiLab': {
+          const query = String(message['query'] ?? '').trim();
+          if (!query) {
+            transport.post({ type: 'aiLabError', text: 'Enter a question or experiment idea first.' });
+            break;
+          }
+          const config = vscode.workspace.getConfiguration();
+          const requested = String(message['model'] ?? '').trim();
+          const activeModel = requested || config.get<string>('pip.model', 'qwen2.5-coder:3b');
+          try {
+            transport.post({ type: 'aiLabTelemetry', model: activeModel, text: 'Starting local inference…' });
+            const result = await runWorker(
+              'aiLab',
+              'pip.reasoningModel',
+              aiLabPrompt(query, activeModel, codeContext),
+              { priority: 'foreground', model: activeModel },
+            );
+            const card = parseAiLabCard(result.text);
+            const parts = [
+              { title: '1. The AI Concept (60 Seconds)', body: card.concept },
+              { title: '2. How PIP Demonstrates or Violates This', body: card.wherePip },
+              { title: '3. 15-Minute Code Experiment', body: card.experiment },
+            ].filter((part) => part.body.trim());
+            transport.post({
+              type: 'aiLabReply',
+              headline: card.concept.split('\n').find((line) => line.trim())?.trim() || query,
+              parts,
+              telemetry: {
+                model: result.model,
+                tokensPerSecond: result.tokensPerSecond,
+                latencyMs: result.latencyMs,
+                evalCount: result.evalCount,
+                fromMock: result.fromMock,
+              },
+              tokensPerSecond: result.tokensPerSecond,
+              latencyMs: result.latencyMs,
+              evalCount: result.evalCount,
+              model: result.model,
+              text: !parts.length ? result.text : undefined,
+            });
+            transport.post(statLine(result, 'aiLab'));
+          } catch (error) {
+            transport.post({
+              type: 'aiLabError',
+              text: error instanceof Error ? error.message : 'AI Lab request failed.',
+            });
+          }
           break;
         }
         case 'speak': {

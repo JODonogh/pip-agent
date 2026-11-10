@@ -204,6 +204,212 @@ summary:focus-visible {
   border-color: var(--cnvs-sys-color-border-container);
 }
 
+.pip-icon-btn {
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  border-radius: var(--cnvs-sys-shape-sm);
+  font-size: 14px;
+  line-height: 1;
+  border: 1px solid var(--cnvs-sys-color-border-container);
+  background: var(--cnvs-sys-color-bg-default);
+  color: var(--cnvs-sys-color-text-default);
+  cursor: pointer;
+}
+
+.pip-icon-btn:hover {
+  background: var(--cnvs-sys-color-bg-alt);
+}
+
+.pip-icon-btn[aria-pressed='true'] {
+  border-color: var(--cnvs-sys-color-action-primary-bg);
+  box-shadow: 0 0 0 1px var(--cnvs-sys-color-action-primary-bg);
+}
+
+/* ---------- AI Lab studio ---------- */
+.pip-ai-lab-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cnvs-sys-gap-xs);
+  margin-block: var(--cnvs-sys-gap-sm);
+  padding: var(--cnvs-sys-padding-sm);
+  border: 1px solid var(--cnvs-sys-color-border-container);
+  border-radius: var(--cnvs-sys-shape-md);
+  background: var(--cnvs-sys-color-surface-default);
+  box-shadow: var(--cnvs-sys-depth-1);
+}
+
+.pip-ai-lab-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cnvs-sys-gap-xxs);
+}
+
+.pip-ai-lab-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--cnvs-sys-gap-xs);
+  justify-content: space-between;
+}
+
+.pip-ai-lab-title {
+  font-size: var(--cnvs-sys-font-size-subtext-md);
+  font-weight: var(--cnvs-sys-font-weight-bold);
+  color: var(--cnvs-sys-color-text-stronger);
+}
+
+.pip-select {
+  min-width: 9rem;
+  max-width: 100%;
+  font-size: var(--cnvs-sys-font-size-subtext-md);
+  padding: var(--cnvs-sys-padding-xxs) var(--cnvs-sys-padding-xs);
+  border: 1px solid var(--cnvs-sys-color-border-strong);
+  border-radius: var(--cnvs-sys-shape-sm);
+  background: var(--cnvs-sys-color-bg-default);
+  color: var(--cnvs-sys-color-text-default);
+}
+
+.pip-metrics-bar {
+  font-family: var(--cnvs-sys-font-family-mono);
+  font-size: var(--cnvs-sys-font-size-subtext-md);
+  color: var(--cnvs-sys-color-text-muted);
+}
+
+.pip-ai-lab-input-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cnvs-sys-gap-xs);
+  align-items: stretch;
+}
+
+.pip-input {
+  flex: 1 1 12rem;
+  min-width: 0;
+  padding: var(--cnvs-sys-padding-xs);
+  border: 1px solid var(--cnvs-sys-color-border-strong);
+  border-radius: var(--cnvs-sys-shape-sm);
+  font: inherit;
+  background: var(--cnvs-sys-color-bg-default);
+  color: var(--cnvs-sys-color-text-default);
+}
+
+.pip-btn {
+  padding: var(--cnvs-sys-padding-xs) var(--cnvs-sys-padding-sm);
+  border: 1px solid var(--cnvs-sys-color-border-strong);
+  border-radius: var(--cnvs-sys-shape-sm);
+  background: var(--cnvs-sys-color-bg-default);
+  color: var(--cnvs-sys-color-text-default);
+  font: inherit;
+  cursor: pointer;
+}
+
+.pip-btn-primary {
+  background: var(--cnvs-sys-color-action-primary-bg);
+  color: var(--cnvs-sys-color-action-primary-fg);
+  border-color: var(--cnvs-sys-color-action-primary-bg);
+  font-weight: var(--cnvs-sys-font-weight-medium);
+}
+
+.pip-btn-primary:hover {
+  background: var(--cnvs-sys-color-action-primary-hover);
+}
+
+.pip-ai-lab-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--cnvs-sys-gap-xxs);
+}
+
+.pip-chip {
+  font-size: var(--cnvs-sys-font-size-subtext-md);
+  padding: var(--cnvs-sys-padding-xxs) var(--cnvs-sys-padding-xs);
+  border: 1px solid var(--cnvs-sys-color-border-container);
+  border-radius: 999px;
+  background: var(--cnvs-sys-color-bg-alt);
+  color: var(--cnvs-sys-color-text-default);
+  cursor: pointer;
+}
+
+.pip-chip:hover {
+  border-color: var(--cnvs-sys-color-border-strong);
+  background: var(--cnvs-sys-color-surface-default);
+}
+
+.pip-ai-lab-output {
+  padding: var(--cnvs-sys-padding-xs);
+  border: 1px dashed var(--cnvs-sys-color-border-container);
+  border-radius: var(--cnvs-sys-shape-sm);
+  font-size: var(--cnvs-sys-font-size-body-sm);
+  line-height: var(--cnvs-sys-line-height-body-sm);
+  white-space: pre-wrap;
+  max-height: 16rem;
+  overflow: auto;
+}
+
+.pip-ai-lab-output.is-pulsing {
+  border-style: solid;
+  border-color: var(--cnvs-sys-color-action-primary-bg);
+  animation: pipAiLabPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pipAiLabPulse {
+  0%, 100% { box-shadow: 0 0 0 0 transparent; opacity: 1; }
+  50% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--cnvs-sys-color-action-primary-bg) 35%, transparent); opacity: 0.92; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pip-ai-lab-output.is-pulsing { animation: none; outline: 2px solid var(--cnvs-sys-color-action-primary-bg); }
+}
+
+.pip-ai-lab-pending {
+  margin: 0;
+  color: var(--cnvs-sys-color-text-muted);
+}
+
+.pip-ai-lab-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cnvs-sys-gap-xs);
+}
+
+.pip-ai-lab-card-head {
+  font-weight: var(--cnvs-sys-font-weight-bold);
+  color: var(--cnvs-sys-color-text-stronger);
+}
+
+.pip-ai-lab-card-parts {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cnvs-sys-gap-xs);
+}
+
+.pip-ai-lab-part-title {
+  margin: 0 0 var(--cnvs-sys-padding-xxs);
+  font-size: var(--cnvs-sys-font-size-subtext-md);
+  font-weight: var(--cnvs-sys-font-weight-medium);
+  color: var(--cnvs-sys-color-text-stronger);
+}
+
+.pip-ai-lab-part-body {
+  white-space: pre-wrap;
+}
+
+.pip-ai-lab-telemetry {
+  margin-block-start: var(--cnvs-sys-gap-xs);
+  padding-block-start: var(--cnvs-sys-padding-xxs);
+  border-block-start: 1px solid var(--cnvs-sys-color-border-divider);
+  font-family: var(--cnvs-sys-font-family-mono);
+  font-size: var(--cnvs-sys-font-size-subtext-md);
+  color: var(--cnvs-sys-color-text-muted);
+}
+
+.pip-ai-lab-error {
+  margin: 0;
+  color: var(--cnvs-sys-color-caution);
+}
+
 /* ---------- Canvas Kit Segmented Control (A2UI Mode Switcher) ---------- */
 .a2uiBar {
   display: grid;
