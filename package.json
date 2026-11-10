@@ -2,7 +2,8 @@
   "name": "agent-pip",
   "displayName": "Agent PIP — Learn",
   "description": "Engineer-led learning beside your code. Local Ollama models only — nothing leaves this machine.",
-  "version": "0.6.0",
+  "version": "0.11.14",
+  "icon": "media/brand.jpeg",
   "publisher": "local-poc",
   "license": "UNLICENSED",
   "engines": { "vscode": "^1.90.0" },
@@ -27,7 +28,7 @@
       "activitybar": [{ "id": "agentPip", "title": "Agent PIP", "icon": "media/icon.svg" }]
     },
     "views": {
-      "agentPip": [{ "type": "webview", "id": "pip.sidebar", "name": "Learn · Diagram · Flashcards · Drill" }]
+      "agentPip": [{ "type": "webview", "id": "pip.sidebar", "name": "Agent PIP" }]
     },
     "configuration": {
       "title": "Agent PIP",
@@ -39,13 +40,38 @@
         },
         "pip.model": {
           "type": "string",
-          "default": "mistral:latest",
-          "description": "Model for explanations (local Ollama model name)."
+          "default": "qwen2.5-coder:3b",
+          "description": "Model for explanations (local Ollama). Benchmarked: ~1.6s warm with clean chunk format. Set to qwen2.5-coder:7b or mistral:latest for maximum depth."
+        },
+        "pip.creativeModel": {
+          "type": "string",
+          "default": "",
+          "description": "Optional model for analogies. Leave empty to use pip.model. A different model can give fresher analogies and stops them repeating the history section."
+        },
+        "pip.webRoots": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Roots & history may read the introduction of one Wikipedia page for a fixed list of programming topics (for example SQL or exception handling). Only the topic title is sent, never your code or identifiers; the local model writes the story from that page. Turn off to use the built-in stories only."
+        },
+        "pip.semanticSearch": {
+          "type": "boolean",
+          "default": true,
+          "description": "Index the workspace with a local embedding model so the Solve chat can search by meaning. Needs: ollama pull nomic-embed-text. Falls back to keyword search if unavailable."
+        },
+        "pip.embeddingModel": {
+          "type": "string",
+          "default": "nomic-embed-text",
+          "description": "Local Ollama embedding model used for semantic search."
+        },
+        "pip.reasoningModel": {
+          "type": "string",
+          "default": "qwen2.5-coder:7b",
+          "description": "Model for the Solve chat and idea challenges, where answer quality matters more than speed. Falls back to pip.model if it is not installed. Explanations and popups stay on the fast model."
         },
         "pip.fastModel": {
           "type": "string",
-          "default": "mistral:latest",
-          "description": "Model for quick-fire / rubber-duck / drills (local Ollama model name)."
+          "default": "qwen2.5-coder:3b",
+          "description": "Model for popups / duck / solver / drills. Same default as pip.model so Ollama never swaps models (swapping is the cold-load killer)."
         }
       }
     }
@@ -54,7 +80,7 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "test": "vitest run",
-    "package:vsix": "npx @vscode/vsce package --allow-missing-repository"
+    "package:vsix": "node scripts/package.cjs"
   },
   "devDependencies": {
     "@types/node": "^20.14.0",

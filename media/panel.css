@@ -1,138 +1,1113 @@
-body {
-  font-family: var(--vscode-font-family);
-  font-size: var(--vscode-font-size);
-  color: var(--vscode-foreground);
-  background: var(--vscode-editor-background);
-  padding: 12px;
-  line-height: 1.45;
-}
-.banner { display: block; text-align: center; }
-.bannerMark { width: 180px; max-width: 80%; height: auto; display: block; margin: 0 auto; }
-body, .card, .answer, details { overflow-wrap: anywhere; word-break: break-word; }
-.timer input { width: 46px; height: 26px; text-align: center; box-sizing: border-box; }
-.hiddenBtn { display: none; }
-.solverLine { margin: 6px 0; }
-.wordPopup {
-  position: fixed;
-  width: 320px;
-  max-width: 92vw;
-  z-index: 50;
-  background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
-  color: var(--vscode-foreground);
-  border: 1px solid var(--vscode-widget-border, var(--vscode-panel-border));
-  border-radius: 8px;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
-  padding: 10px;
-}
-.wordPopupHead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-.wordPopupHead button { padding: 1px 8px; }
-.wordPopup input { width: 100%; box-sizing: border-box; margin-top: 8px; }
-.duckBox { margin: 10px 0; }
-.duckBox input { width: 100%; box-sizing: border-box; }
-.duckBox .answer { margin-top: 6px; }
-textarea {
-  width: 100%;
+@import './canvas-tokens.css';
+
+/* ==========================================================================
+   Workday Canvas Kit Layout & Component Styles for Agent PIP
+   Spacing strictly uses --cnvs-sys-gap-* and --cnvs-sys-padding-* tokens.
+   ========================================================================== */
+
+*,
+*::before,
+*::after {
   box-sizing: border-box;
-  margin: 8px 0;
-  background: var(--vscode-input-background);
-  color: var(--vscode-input-foreground);
-  border: 1px solid var(--vscode-input-border, transparent);
-  border-radius: 4px;
-  padding: 6px;
-  font-family: inherit;
 }
-.verdict { margin-top: 6px; font-weight: 600; }
-.verdict-correct { color: var(--vscode-charts-green, inherit); }
-.verdict-wrong { color: var(--vscode-errorForeground); }
-.verdict-partly { color: var(--vscode-editorWarning-foreground); }
-.bottomShortcuts { margin-top: 18px; }
-.topGrid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin: 8px 0; }
-.topGrid button { font-weight: 600; padding: 7px 4px; }
-.styleChip.isActive, .diagramTypeBtn.isActive { background: var(--vscode-button-background); color: var(--vscode-button-foreground); }
-.bottomBar { display: flex; justify-content: flex-end; margin-top: 10px; }
-.diagramSvg .node.walkActive .shape { fill: var(--vscode-editorWarning-foreground); stroke-width: 2.5; }
-.deepCard summary { font-weight: 600; }
-pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 0.85em; }
-.banner h2 { font-size: 1.6em; margin: 6px 0 10px; font-weight: 700; text-align: center; }
-.diagramSvg .node .shape { fill: var(--vscode-editor-inactiveSelectionBackground); stroke: var(--vscode-foreground); }
-.diagramSvg .node.kind-endpoint .shape, .diagramSvg .node.kind-method .shape { fill: var(--vscode-foreground); }
-.diagramSvg .node.kind-branch .shape { fill: var(--vscode-editorWarning-foreground); }
-.card summary { cursor: pointer; }
-.primary button { font-weight: 600; }
-.iconBtn { font-size: 15px; line-height: 1; padding: 5px 9px; }
-.nestedCard {
-  border-left: 3px solid var(--vscode-foreground);
-  border-top: 1px solid var(--vscode-panel-border);
-  border-right: 1px solid var(--vscode-panel-border);
-  border-bottom: 1px solid var(--vscode-panel-border);
-  border-radius: 6px;
-  padding: 8px 10px;
-  margin: 10px 0;
+
+body {
+  margin: 0;
+  padding: var(--cnvs-sys-padding-sm);
+  font-family: var(--cnvs-sys-font-family-default);
+  font-size: var(--cnvs-sys-font-size-body-sm);
+  line-height: var(--cnvs-sys-line-height-body-sm);
+  color: var(--cnvs-sys-color-text-default);
+  background-color: var(--cnvs-sys-color-bg-default);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
-.diagramTypeBtn.isActive {
-  background: var(--vscode-button-background);
-  color: var(--vscode-button-foreground);
+
+/* ---------- Page Stack (Canvas Kit Flex Column) ---------- */
+.cnvs-shell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cnvs-sys-gap-sm);
+  max-width: 520px;
+  margin-inline: auto;
 }
-h3 { font-size: 1em; margin: 6px 0; }
+
+/* ---------- Hero Constructivist / Proun Card ---------- */
+.banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--cnvs-sys-padding-md) var(--cnvs-sys-padding-sm) var(--cnvs-sys-padding-sm);
+  background: var(--cnvs-sys-color-surface-default);
+  border: 1px solid var(--cnvs-sys-color-border-container);
+  border-radius: var(--cnvs-sys-shape-x2);
+  box-shadow: var(--cnvs-sys-depth-1);
+  position: relative;
+  overflow: hidden;
+}
+
+.bannerMark {
+  width: 148px;
+  max-width: 65%;
+  height: auto;
+  max-height: 200px;
+  object-fit: contain;
+  display: block;
+  margin-inline: auto;
+}
+
+.bannerTitleRow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--cnvs-sys-gap-xs);
+  margin-block-start: var(--cnvs-sys-gap-xs);
+}
+
+.banner h2 {
+  font-size: var(--cnvs-sys-font-size-title-sm);
+  line-height: var(--cnvs-sys-line-height-title-sm);
+  font-weight: var(--cnvs-sys-font-weight-bold);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--cnvs-sys-color-text-stronger);
+  margin: 0;
+  text-align: center;
+}
+
+.bannerSub {
+  font-size: var(--cnvs-sys-font-size-subtext-sm);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--cnvs-sys-color-text-muted);
+}
+
+/* ---------- Top Control Deck (Grid Layout) ---------- */
+.cnvs-control-deck {
+  display: flex;
+  flex-direction: column;
+  gap: var(--cnvs-sys-gap-xs);
+  background: var(--cnvs-sys-color-surface-default);
+  border: 1px solid var(--cnvs-sys-color-border-container);
+  border-radius: var(--cnvs-sys-shape-x2);
+  padding: var(--cnvs-sys-padding-xs);
+  box-shadow: var(--cnvs-sys-depth-1);
+}
+
+.topGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--cnvs-sys-gap-xs);
+}
+
+/* Canvas Kit Pill Buttons */
 button {
-  background: var(--vscode-button-secondaryBackground);
-  color: var(--vscode-button-secondaryForeground);
-  border: 1px solid var(--vscode-button-border, transparent);
-  border-radius: 4px;
-  padding: 4px 10px;
+  font-family: var(--cnvs-sys-font-family-default);
+  font-size: var(--cnvs-sys-font-size-subtext-md);
+  font-weight: var(--cnvs-sys-font-weight-medium);
+  color: var(--cnvs-sys-color-text-stronger);
+  background: var(--cnvs-sys-color-surface-alt);
+  border: 1px solid var(--cnvs-sys-color-border-strong);
+  border-radius: var(--cnvs-sys-shape-round);
+  padding: var(--cnvs-sys-padding-xxs) var(--cnvs-sys-padding-sm);
+  cursor: pointer;
+  transition: background-color 120ms var(--cnvs-sys-motion-easing-quick),
+              border-color 120ms var(--cnvs-sys-motion-easing-quick),
+              transform 80ms var(--cnvs-sys-motion-easing-quick);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--cnvs-sys-gap-xs);
+  min-height: 28px;
+}
+
+button:hover {
+  background: var(--cnvs-sys-color-surface-hover);
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+summary:focus-visible {
+  outline: 2px solid var(--cnvs-sys-color-focus-ring);
+  outline-offset: 1px;
+}
+
+/* Primary Button (Explain) — High Contrast Canvas Kit Primary */
+.topGrid #explainBtn {
+  background: var(--cnvs-sys-color-action-primary-bg);
+  color: var(--cnvs-sys-color-action-primary-fg);
+  border-color: var(--cnvs-sys-color-action-primary-bg);
+  font-weight: var(--cnvs-sys-font-weight-bold);
+}
+
+.topGrid #explainBtn:hover {
+  background: var(--cnvs-sys-color-action-primary-hover);
+}
+
+.topGrid button {
+  padding: var(--cnvs-sys-padding-xs) var(--cnvs-sys-padding-xs);
+  font-size: var(--cnvs-sys-font-size-body-sm);
+}
+
+/* Timebox Grid Row */
+.timerGrid {
+  display: grid;
+  grid-template-columns: auto 44px auto 1fr auto;
+  align-items: center;
+  gap: var(--cnvs-sys-gap-xs);
+  padding-block-start: var(--cnvs-sys-padding-xxs);
+  border-block-start: 1px solid var(--cnvs-sys-color-border-divider);
+}
+
+.timerLabel {
+  font-size: var(--cnvs-sys-font-size-subtext-md);
+  font-weight: var(--cnvs-sys-font-weight-medium);
+  color: var(--cnvs-sys-color-text-muted);
+  padding-inline-start: var(--cnvs-sys-padding-xxs);
+}
+
+#timerMin {
+  width: 44px;
+  height: 26px;
+  padding: 0;
+  text-align: center;
+  font-family: var(--cnvs-sys-font-family-mono);
+  font-size: var(--cnvs-sys-font-size-subtext-md);
+  font-weight: var(--cnvs-sys-font-weight-bold);
+  background: var(--cnvs-sys-color-bg-default);
+  color: var(--cnvs-sys-color-text-stronger);
+  border: 1px solid var(--cnvs-sys-color-border-strong);
+  border-radius: var(--cnvs-sys-shape-sm);
+}
+
+.quickIconRow {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--cnvs-sys-gap-xs);
+}
+
+.iconBtn {
+  width: 26px;
+  height: 26px;
+  min-height: 26px;
+  padding: 0;
+  border-radius: var(--cnvs-sys-shape-sm);
+  font-size: 13px;
+  line-height: 1;
+  border-color: var(--cnvs-sys-color-border-container);
+}
+
+/* ---------- Canvas Kit Segmented Control (A2UI Mode Switcher) ---------- */
+.a2uiBar {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 2px;
+  padding: 3px;
+  background: var(--cnvs-sys-color-surface-default);
+  border: 1px solid var(--cnvs-sys-color-border-container);
+  border-radius: var(--cnvs-sys-shape-x2);
+}
+
+.a2uiBtn {
+  border: none;
+  border-radius: var(--cnvs-sys-shape-sm);
+  background: transparent;
+  color: var(--cnvs-sys-color-text-muted);
+  font-size: var(--cnvs-sys-font-size-subtext-md);
+  font-weight: var(--cnvs-sys-font-weight-medium);
+  padding: var(--cnvs-sys-padding-xxs) var(--cnvs-sys-padding-xxs);
+  min-height: 28px;
+}
+
+.a2uiBtn:hover {
+  color: var(--cnvs-sys-color-text-stronger);
+  background: var(--cnvs-sys-color-surface-alt);
+}
+
+.a2uiBtn.isActive {
+  background: var(--cnvs-sys-color-action-primary-bg);
+  color: var(--cnvs-sys-color-action-primary-fg);
+  font-weight: var(--cnvs-sys-font-weight-bold);
+  box-shadow: var(--cnvs-sys-depth-1);
+}
+
+/* ---------- Canvas Kit Card & Flush Disclosure Accordion ---------- */
+.cnvs-card {
+  background: var(--cnvs-sys-color-surface-default);
+  border: 1px solid var(--cnvs-sys-color-border-container);
+  border-radius: var(--cnvs-sys-shape-x2);
+  box-shadow: var(--cnvs-sys-depth-1);
+  overflow: hidden;
+}
+
+.cnvs-card-pad {
+  padding: var(--cnvs-sys-padding-sm);
+}
+
+.cnvs-empty-state {
+  color: var(--cnvs-sys-color-text-muted);
+  font-size: var(--cnvs-sys-font-size-subtext-md);
+  text-align: center;
+  padding: var(--cnvs-sys-padding-sm) var(--cnvs-sys-padding-xs);
+}
+
+/* Bottom Line Callout inside Explanation Card */
+.bottomline {
+  font-size: var(--cnvs-sys-font-size-body-md);
+  line-height: var(--cnvs-sys-line-height-body-md);
+  font-weight: var(--cnvs-sys-font-weight-medium);
+  color: var(--cnvs-sys-color-text-stronger);
+  padding: var(--cnvs-sys-padding-sm);
+  border-inline-start: 3px solid var(--cnvs-sys-color-action-primary-bg);
+  background: var(--cnvs-sys-color-surface-alt);
+  margin: 0;
+}
+
+/* Flush Accordion Items inside a Card (No nested double-borders) */
+details {
+  border-block-start: 1px solid var(--cnvs-sys-color-border-divider);
+  margin: 0;
+  padding: 0;
+  background: transparent;
+}
+
+.cnvs-card > details:first-child {
+  border-block-start: none;
+}
+
+summary {
+  list-style: none;
+  cursor: pointer;
+  padding: var(--cnvs-sys-padding-xs) var(--cnvs-sys-padding-sm);
+  font-size: var(--cnvs-sys-font-size-body-sm);
+  font-weight: var(--cnvs-sys-font-weight-medium);
+  color: var(--cnvs-sys-color-text-strong);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cnvs-sys-gap-xs);
+  user-select: none;
+  transition: background-color 120ms var(--cnvs-sys-motion-easing-quick);
+}
+
+summary::-webkit-details-marker {
+  display: none;
+}
+
+summary::after {
+  content: '›';
+  font-size: 15px;
+  font-weight: var(--cnvs-sys-font-weight-bold);
+  color: var(--cnvs-sys-color-text-muted);
+  transition: transform 150ms var(--cnvs-sys-motion-easing-quick);
+  flex: none;
+}
+
+details[open] > summary::after {
+  transform: rotate(90deg);
+  color: var(--cnvs-sys-color-text-stronger);
+}
+
+summary:hover {
+  background: var(--cnvs-sys-color-surface-alt);
+}
+
+details > div,
+details > p,
+details > ul,
+.detailsBody {
+  padding: var(--cnvs-sys-padding-xs) var(--cnvs-sys-padding-sm) var(--cnvs-sys-padding-sm);
+  color: var(--cnvs-sys-color-text-default);
+}
+
+/* Section Label Tag inside Summary */
+.summaryMeta {
+  font-size: var(--cnvs-sys-font-size-subtext-sm);
+  font-weight: var(--cnvs-sys-font-weight-normal);
+  color: var(--cnvs-sys-color-text-muted);
+  margin-inline-end: auto;
+  padding-inline-start: var(--cnvs-sys-padding-xxs);
+}
+
+/* ---------- Inputs, Textareas, Selects (Canvas Kit Form Controls) ---------- */
+input[type='text'],
+textarea,
+select {
+  width: 100%;
+  font-family: var(--cnvs-sys-font-family-default);
+  font-size: var(--cnvs-sys-font-size-body-sm);
+  background: var(--cnvs-sys-color-bg-default);
+  color: var(--cnvs-sys-color-text-stronger);
+  border: 1px solid var(--cnvs-sys-color-border-strong);
+  border-radius: var(--cnvs-sys-shape-sm);
+  padding: var(--cnvs-sys-padding-xs) var(--cnvs-sys-padding-sm);
+  margin: var(--cnvs-sys-gap-xs) 0;
+}
+
+select {
+  width: auto;
+  padding: var(--cnvs-sys-padding-xxs) var(--cnvs-sys-padding-xs);
+  font-size: var(--cnvs-sys-font-size-subtext-md);
+}
+
+.row {
+  display: flex;
+  gap: var(--cnvs-sys-gap-xs);
+  flex-wrap: wrap;
+  align-items: center;
+  margin: var(--cnvs-sys-gap-xs) 0;
+}
+
+.muted {
+  color: var(--cnvs-sys-color-text-muted);
+  font-size: var(--cnvs-sys-font-size-subtext-md);
+}
+
+/* ---------- Keywords, Code Chips & Highlights ---------- */
+.word {
+  cursor: pointer;
+  border-block-end: 1px dashed var(--cnvs-sys-color-text-stronger);
+  transition: color 100ms ease, background-color 100ms ease;
+}
+
+button.word,
+button.inlineFile {
+  display: inline;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-block-end: 1px dashed currentColor;
+  border-radius: 0;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  text-align: start;
+}
+
+button.inlineFile {
+  font-family: var(--cnvs-sys-font-family-mono);
+  border-block-end-style: solid;
+}
+
+.word:hover {
+  background: var(--cnvs-sys-color-surface-hover);
+  color: var(--cnvs-sys-color-text-stronger);
+}
+
+.code {
+  font-family: var(--cnvs-sys-font-family-mono);
+  font-size: 0.92em;
+  color: var(--cnvs-sys-color-text-stronger);
+  background: var(--cnvs-sys-color-surface-alt);
+  border: 1px solid var(--cnvs-sys-color-border-container);
+  padding: 1px 5px;
+  border-radius: var(--cnvs-sys-shape-sm);
+}
+
+.hl {
+  color: var(--cnvs-sys-color-caution);
+  font-weight: var(--cnvs-sys-font-weight-bold);
+}
+
+/* ---------- Cards, Answers & Flashcards ---------- */
+.card,
+.answer {
+  background: var(--cnvs-sys-color-surface-alt);
+  border: 1px solid var(--cnvs-sys-color-border-container);
+  border-radius: var(--cnvs-sys-shape-md);
+  padding: var(--cnvs-sys-padding-xs) var(--cnvs-sys-padding-sm);
+  margin: var(--cnvs-sys-gap-xs) 0;
+}
+
+.flashcard {
+  border: 1px solid var(--cnvs-sys-color-border-container);
+  border-radius: var(--cnvs-sys-shape-md);
+  margin: var(--cnvs-sys-gap-xs) 0;
+  background: var(--cnvs-sys-color-surface-alt);
+}
+
+.hint {
+  border-inline-start: 3px solid var(--cnvs-sys-color-caution);
+  background: var(--cnvs-sys-color-surface-alt);
+  padding: var(--cnvs-sys-padding-xs) var(--cnvs-sys-padding-sm);
+  margin: var(--cnvs-sys-gap-xs) 0;
+  border-radius: 0 var(--cnvs-sys-shape-sm) var(--cnvs-sys-shape-sm) 0;
+  font-size: var(--cnvs-sys-font-size-subtext-md);
+}
+
+.hidden,
+.hiddenBtn {
+  display: none !important;
+}
+
+/* ---------- Diagrams & Interactive SVG ---------- */
+.diagramTypeBtn.isActive,
+.styleChip.isActive {
+  background: var(--cnvs-sys-color-action-primary-bg);
+  color: var(--cnvs-sys-color-action-primary-fg);
+  border-color: var(--cnvs-sys-color-action-primary-bg);
+  font-weight: var(--cnvs-sys-font-weight-bold);
+}
+
+.layers label {
+  font-size: var(--cnvs-sys-font-size-subtext-md);
+  color: var(--cnvs-sys-color-text-muted);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   cursor: pointer;
 }
-button:hover { background: var(--vscode-button-secondaryHoverBackground); }
-select, input[type='text'] {
-  background: var(--vscode-input-background);
-  color: var(--vscode-input-foreground);
-  border: 1px solid var(--vscode-input-border, transparent);
-  border-radius: 4px;
-  padding: 5px;
+
+.diagramStage {
+  background: var(--cnvs-sys-color-bg-default);
+  border: 1px solid var(--cnvs-sys-color-border-container);
+  border-radius: var(--cnvs-sys-shape-md);
+  padding: var(--cnvs-sys-padding-sm);
+  margin-block: var(--cnvs-sys-gap-xs);
+  overflow: auto;
+  min-height: 240px;
 }
-input[type='text'] { width: 100%; box-sizing: border-box; margin: 8px 0; }
-.row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; align-items: center; }
-.muted { color: var(--vscode-descriptionForeground); font-size: 0.9em; }
-.bottomline { font-size: 1.15em; font-weight: 600; margin: 12px 0; }
-.word { cursor: pointer; border-bottom: 1px dotted var(--vscode-textLink-foreground); }
-.word:hover { color: var(--vscode-textLink-foreground); }
-.code {
-  font-family: var(--vscode-editor-font-family, monospace);
-  color: var(--vscode-symbolIcon-functionForeground, var(--vscode-textLink-foreground));
-  background: var(--vscode-editor-inactiveSelectionBackground);
-  padding: 0 3px;
-  border-radius: 3px;
+
+.diagramSvg {
+  width: 100%;
+  min-width: 320px;
+  display: block;
+  margin-inline: auto;
+  transition: width 140ms ease;
 }
-.hl { color: var(--vscode-editorWarning-foreground); }
-details, .card, .answer {
-  border: 1px solid var(--vscode-panel-border);
-  border-radius: 6px;
+
+.zoomGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-inline-start: auto;
+}
+
+.ideateHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--cnvs-sys-gap-xs);
+  margin-block-end: var(--cnvs-sys-gap-xs);
+}
+
+.primaryActionBtn {
+  background: var(--cnvs-sys-color-action-primary-bg);
+  color: var(--cnvs-sys-color-action-primary-fg);
+  border-color: var(--cnvs-sys-color-action-primary-bg);
+  font-weight: var(--cnvs-sys-font-weight-bold);
+  width: 100%;
+  padding: var(--cnvs-sys-padding-xs) var(--cnvs-sys-padding-sm);
+}
+
+.improveLensBtn.isActive {
+  background: var(--cnvs-sys-color-action-primary-bg);
+  color: var(--cnvs-sys-color-action-primary-fg);
+  border-color: var(--cnvs-sys-color-action-primary-bg);
+}
+
+.ideaMetaRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cnvs-sys-gap-xs);
+  margin-block-end: 4px;
+}
+
+.ideaBadge {
+  font-size: var(--cnvs-sys-font-size-subtext-sm);
+  font-weight: var(--cnvs-sys-font-weight-bold);
+  padding: 1px 8px;
+  border-radius: var(--cnvs-sys-shape-round);
+  background: var(--cnvs-sys-color-surface-hover);
+  border: 1px solid var(--cnvs-sys-color-border-strong);
+}
+
+.diagramSvg .node text {
+  fill: var(--cnvs-sys-color-text-stronger);
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: var(--cnvs-sys-font-family-default);
+}
+
+.diagramSvg .node .nodeKind {
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+  fill: var(--cnvs-sys-color-text-muted);
+  font-weight: 700;
+}
+
+.diagramSvg .node .stepBadge {
+  fill: var(--cnvs-sys-color-action-primary-bg);
+}
+
+.diagramSvg .node .stepBadgeText {
+  fill: var(--cnvs-sys-color-action-primary-fg);
+  font-size: 8.5px;
+  font-weight: 700;
+  font-family: var(--cnvs-sys-font-family-mono);
+}
+
+.diagramSvg .node.kind-endpoint .shape,
+.diagramSvg .node.kind-method .shape {
+  fill: var(--cnvs-sys-color-action-primary-bg);
+  stroke: var(--cnvs-sys-color-action-primary-bg);
+}
+
+.diagramSvg .node.kind-endpoint text,
+.diagramSvg .node.kind-method text,
+.diagramSvg .node.kind-endpoint .nodeKind,
+.diagramSvg .node.kind-method .nodeKind {
+  fill: var(--cnvs-sys-color-action-primary-fg);
+}
+
+.diagramSvg .node.kind-branch .shape {
+  stroke: var(--cnvs-sys-color-caution);
+  stroke-width: 1.8;
+}
+
+.diagramSvg .node.walkActive .shape {
+  stroke: var(--cnvs-sys-color-caution);
+  stroke-width: 3;
+}
+
+.diagramCaption {
+  margin: 0 0 var(--cnvs-sys-gap-xs);
+  font-size: var(--cnvs-sys-font-size-subtext-md);
+  line-height: 1.45;
+  color: var(--cnvs-sys-color-text-default);
+}
+
+.diagramSvg .shape {
+  fill: var(--cnvs-sys-color-action-primary-bg);
+  stroke: var(--cnvs-sys-color-action-primary-bg);
+  stroke-width: 1.5;
+}
+
+.diagramSvg .node text,
+.diagramSvg .node .nodeKind {
+  fill: var(--cnvs-sys-color-action-primary-fg);
+}
+
+.diagramSvg .node .nodeLabel {
+  font-size: 14px;
+}
+
+.diagramSvg .node.kind-hook .shape,
+.diagramSvg .node.kind-state .shape {
+  stroke: var(--cnvs-sys-color-focus-ring);
+  stroke-width: 3;
+}
+
+.diagramSvg .node.kind-branch .shape {
+  fill: var(--cnvs-sys-color-caution);
+  stroke: var(--cnvs-sys-color-caution);
+  stroke-width: 1.5;
+}
+
+.diagramSvg .node.kind-branch text,
+.diagramSvg .node.kind-branch .nodeKind {
+  fill: #1c1404;
+}
+
+.diagramSvg .node.kind-call .shape {
+  stroke: var(--cnvs-sys-color-positive);
+  stroke-width: 3;
+}
+
+.diagramSvg .node.kind-return .shape,
+.diagramSvg .node.kind-assert .shape {
+  fill: var(--cnvs-sys-color-positive);
+  stroke: var(--cnvs-sys-color-positive);
+}
+
+.diagramSvg .node.kind-return text,
+.diagramSvg .node.kind-return .nodeKind,
+.diagramSvg .node.kind-assert text,
+.diagramSvg .node.kind-assert .nodeKind {
+  fill: #08140c;
+}
+
+.diagramSvg .node.kind-import .shape {
+  fill: transparent;
+  stroke: var(--cnvs-sys-color-border-strong);
+  stroke-width: 1.25;
+}
+
+.diagramSvg .node.kind-import text,
+.diagramSvg .node.kind-import .nodeKind {
+  fill: var(--cnvs-sys-color-text-strong);
+}
+
+.diagramSvg .edge {
+  fill: none;
+  stroke: var(--cnvs-sys-color-text-muted);
+  stroke-width: 1.6;
+}
+
+.diagramSvg .edgeHead {
+  fill: var(--cnvs-sys-color-text-muted);
+  stroke: none;
+}
+
+.diagramSvg .importLaneLabel {
+  fill: var(--cnvs-sys-color-text-muted);
+  font-size: 11px;
+  font-family: var(--cnvs-sys-font-family-default);
+}
+
+.ledgerRung {
+  margin-top: var(--cnvs-sys-gap-xs);
+  font-size: var(--cnvs-sys-font-size-subtext-sm);
+  font-weight: var(--cnvs-sys-font-weight-bold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--cnvs-sys-color-text-muted);
+}
+
+.ledgerRow {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--cnvs-sys-color-border-divider);
+}
+
+.ledgerRow strong {
+  margin-inline-end: 6px;
+}
+
+/* ---------- Disposable Word Popup (Canvas Kit Popover Depth 4) ---------- */
+.wordPopup {
+  position: fixed;
+  width: 310px;
+  max-width: 92vw;
+  z-index: 100;
+  background: var(--cnvs-sys-color-surface-popover);
+  color: var(--cnvs-sys-color-text-stronger);
+  border: 1px solid var(--cnvs-sys-color-border-strong);
+  border-radius: var(--cnvs-sys-shape-x2);
+  box-shadow: var(--cnvs-sys-depth-4);
+  padding: var(--cnvs-sys-padding-sm);
+}
+
+.wordPopupHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-block-end: var(--cnvs-sys-gap-xs);
+  padding-block-end: var(--cnvs-sys-padding-xxs);
+  border-block-end: 1px solid var(--cnvs-sys-color-border-divider);
+}
+
+.wordPopupHead button {
+  min-height: 22px;
+  width: 22px;
+  padding: 0;
+  border-radius: var(--cnvs-sys-shape-sm);
+}
+
+#wordPopupBack {
+  width: auto;
+  padding: 0 8px;
+  font-size: var(--cnvs-sys-font-size-subtext-md);
+}
+
+.wordPopupCrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-block-end: var(--cnvs-sys-gap-xs);
+  font-size: var(--cnvs-sys-font-size-subtext-md);
+  color: var(--cnvs-sys-color-text-muted);
+}
+
+.wordPopupCrumbs button {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--cnvs-sys-color-text-default);
+  text-decoration: underline;
+  cursor: pointer;
+  font-size: inherit;
+}
+
+/* ---------- Solver & Verdicts ---------- */
+.solverLine {
+  margin: var(--cnvs-sys-gap-xs) 0;
+}
+
+.solverEvidence {
+  margin-block-start: var(--cnvs-sys-gap-sm);
+}
+
+.duckBox > label {
+  display: block;
+  margin-block-end: var(--cnvs-sys-gap-xs);
+  font-weight: var(--cnvs-sys-font-weight-bold);
+}
+
+#duckHint {
+  margin: var(--cnvs-sys-gap-xs) 0;
+}
+
+#duckLog .answer {
+  white-space: pre-wrap;
+}
+
+button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.verdict {
+  margin-block-start: var(--cnvs-sys-gap-xs);
+  font-weight: var(--cnvs-sys-font-weight-bold);
+}
+
+.verdict-correct {
+  color: var(--cnvs-sys-color-positive);
+}
+
+.verdict-wrong {
+  color: var(--cnvs-sys-color-critical);
+}
+
+.verdict-partly {
+  color: var(--cnvs-sys-color-caution);
+}
+
+pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--cnvs-sys-font-family-mono);
+  font-size: var(--cnvs-sys-font-size-subtext-md);
+  background: var(--cnvs-sys-color-bg-default);
+  border: 1px solid var(--cnvs-sys-color-border-container);
+  border-radius: var(--cnvs-sys-shape-sm);
+  padding: var(--cnvs-sys-padding-xs);
+  margin: var(--cnvs-sys-gap-xs) 0;
+}
+
+/* ---------- Footer Bar ---------- */
+.cnvs-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--cnvs-sys-gap-xs);
+  padding-block-start: var(--cnvs-sys-padding-xs);
+  border-block-start: 1px solid var(--cnvs-sys-color-border-divider);
+}
+
+.footerControls {
+  display: flex;
+  gap: var(--cnvs-sys-gap-xs);
+  flex-shrink: 0;
+}
+
+
+/* Focused discussions stay beside the idea being learned. */
+.ideaHelpDialog {
+  position: fixed;
+  inset: 12vh 4vw auto;
+  z-index: 110;
+  max-height: 76vh;
+  overflow: auto;
+  padding: var(--cnvs-sys-padding-sm);
+  border: 1px solid var(--cnvs-sys-color-border-strong);
+  border-radius: var(--cnvs-sys-shape-x2);
+  background: var(--cnvs-sys-color-surface-popover);
+  box-shadow: var(--cnvs-sys-depth-4);
+}
+
+.ideaHelpAnswer {
+  white-space: pre-wrap;
+  margin-block: var(--cnvs-sys-gap-sm);
+}
+
+.ideaHelpDialog label {
+  display: block;
+  margin-block-end: var(--cnvs-sys-gap-xs);
+}
+
+.ideaVerification {
+  margin-block-start: var(--cnvs-sys-gap-xs);
+}
+
+
+.ideationActions {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--cnvs-sys-gap-xs);
+}
+.ideationActions > button {
+  min-width: 0;
+  padding-inline: 4px;
+  font-size: clamp(10px, 2.8vw, 13px);
+  white-space: nowrap;
+}
+.diagramCaption {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+.diagramSvg { overflow: visible; }
+
+/* Visualise keeps selectable views compact and provides distinct explanatory forms. */
+.a2uiBtn { min-width: 0; font-size: clamp(10px, 2.6vw, 13px); padding-inline: 2px; }
+.plotLabel { fill: var(--cnvs-sys-color-text-default); font: 11px var(--cnvs-sys-font-family-default); }
+.plotGrid { stroke: var(--cnvs-sys-color-border-container); stroke-width: 0.6; fill: none; }
+.plotSeries { fill: none; stroke-width: 2.5; }
+.plotSeries-0 { stroke: #39b8cf; }.plotSeries-1 { stroke: #b589e8; }.plotSeries-2 { stroke: #e9ac4f; }
+.plotLegend-0 { fill: #39b8cf; }.plotLegend-1 { fill: #b589e8; }.plotLegend-2 { fill: #e9ac4f; }
+.wireframeDiagram { background: #06181d; border-radius: 6px; }
+.wireframeDiagram .node[class*="kind-"] .shape { fill: #06181d; stroke: #63d9e7; stroke-width: 1; }
+.wireframeDiagram .node[class*="kind-"] text, .wireframeDiagram .node[class*="kind-"] .nodeKind { fill: #a4eef5; }
+.wireframeDiagram .edge, .wireOutline { stroke: #63d9e7; stroke-width: 1; fill: none; }
+.wireframeDiagram .edgeHead { fill: #63d9e7; }
+
+.diagramSvg.decisionsDiagram .node.coverage-covered .shape { stroke: #49bd7b; stroke-width: 3; }
+.diagramSvg.decisionsDiagram .node.coverage-missed .shape { stroke: #ed7070; stroke-width: 3; }
+.diagramSvg.decisionsDiagram .node.coverage-unknown .shape { stroke-dasharray: 5 3; }
+
+.diagramSvg.decisionsDiagram .node .shape { fill: var(--cnvs-sys-color-surface-alt); }
+.diagramSvg.decisionsDiagram .node text, .diagramSvg.decisionsDiagram .node .nodeKind { fill: var(--cnvs-sys-color-text-stronger); }
+
+/* Small, deliberate concept links and popups that remain reachable on narrow screens. */
+button.word { border-block-end-color: var(--vscode-textLink-foreground, #63b7c5); }
+button.word:focus-visible { outline: 2px solid var(--vscode-focusBorder, #63b7c5); outline-offset: 2px; }
+.wordPopup { max-height: calc(100vh - 16px); overflow: auto; }
+
+.visualiseActions { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--cnvs-sys-gap-xs); }
+.visualiseActions > button { min-width: 0; }
+.diagramDiscussion { margin-block: var(--cnvs-sys-gap-sm); }
+.diagramDiscussion label { display: block; margin-block: var(--cnvs-sys-gap-xs); }
+#diagramAnswer { white-space: pre-wrap; margin-block: var(--cnvs-sys-gap-xs); }
+.chartLegend { display: grid; gap: 3px; margin-block: var(--cnvs-sys-gap-xs); }
+.chartLegend span { font-size: var(--cnvs-sys-font-size-subtext-md); }
+.chartLegend .plotLegend-0 { color: #39b8cf; }
+.chartLegend .plotLegend-1 { color: #b589e8; }
+.chartLegend .plotLegend-2 { color: #e9ac4f; }
+
+/* Review & drill list */
+.cardSummary { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.cardTitle { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.chip { flex: none; font-size: 11px; padding: 1px 6px; border-radius: 8px; border: 1px solid var(--vscode-editorWidget-border, #555); color: var(--vscode-descriptionForeground); white-space: nowrap; }
+.chip-weak { border-color: var(--vscode-editorWarning-foreground, #cca700); color: var(--vscode-editorWarning-foreground, #cca700); }
+.chip-solid { border-color: var(--vscode-testing-iconPassed, #3fb950); color: var(--vscode-testing-iconPassed, #3fb950); }
+.removeBtn { flex: none; }
+.cardTakeaway { margin: 6px 0 2px; }
+.drillOptions { margin-top: 6px; }
+.drillOption { display: flex; align-items: baseline; gap: 8px; margin: 4px 0; flex-wrap: wrap; }
+.drillOption .muted { flex: 1; min-width: 140px; }
+
+
+/* Source-order messages have participant lifelines; data flow follows supplied graph edges. */
+.sequenceParticipant { fill: var(--cnvs-sys-color-surface-alt); stroke: var(--cnvs-sys-color-border-strong); stroke-width: 1.2; }
+.sequenceLifeline { fill: none; stroke: var(--cnvs-sys-color-text-muted); stroke-width: 1; stroke-dasharray: 5 4; }
+.sequenceLabel { fill: var(--cnvs-sys-color-text-default); font: 11px var(--cnvs-sys-font-family-default); }
+.flowEdgeLabel { fill: var(--cnvs-sys-color-text-default); font: 10px var(--cnvs-sys-font-family-default); paint-order: stroke; stroke: var(--cnvs-sys-color-bg-default); stroke-width: 4px; stroke-linejoin: round; }
+.timeboxComplete { color: var(--cnvs-sys-color-caution); border-radius: 4px; animation: timeboxCompletePulse 800ms ease-in-out 3; }
+@keyframes timeboxCompletePulse { 0%, 100% { box-shadow: 0 0 0 0 transparent; } 50% { box-shadow: 0 0 0 4px var(--cnvs-sys-color-caution); } }
+@media (prefers-reduced-motion: reduce) { .timeboxComplete { animation: none; outline: 2px solid var(--cnvs-sys-color-caution); } }
+
+.sequenceMessage.walkActive .edge { stroke: var(--cnvs-sys-color-caution); stroke-width: 2.5; }
+.sequenceMessage.walkActive .edgeHead { fill: var(--cnvs-sys-color-caution); }
+
+#timerSoundBtn.soundMuted { text-decoration: line-through; opacity: 0.65; }
+
+
+/* Webview-visible tooltips; native title attributes are upgraded by tooltip.js. */
+.pipTooltip {
+  position: fixed;
+  z-index: 1000;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: min(360px, calc(100vw - 16px));
+  max-height: calc(100vh - 16px);
+  overflow: auto;
   padding: 8px 10px;
-  margin: 8px 0;
+  border: 1px solid var(--vscode-editorHoverWidget-border, #666);
+  border-radius: 6px;
+  background: var(--vscode-editorHoverWidget-background, #242424);
+  color: var(--vscode-editorHoverWidget-foreground, #f2f2f2);
+  box-shadow: 0 3px 12px #0005;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  cursor: default;
 }
-summary { cursor: pointer; font-weight: 600; }
-.hint {
-  border-left: 3px solid var(--vscode-editorWarning-foreground);
-  padding: 6px 10px;
-  margin: 10px 0;
+.pipTooltip[hidden] { display: none; }
+
+
+/* A wide sequence stays inside its own reachable viewport instead of widening the webview. */
+.cnvs-shell, .cnvs-card, .detailsBody, .diagramStage { min-width: 0; }
+.diagramCanvas {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-gutter: stable;
+  padding-block-end: 8px;
 }
-.hidden { display: none; }
-.block { margin-top: 18px; border-top: 1px solid var(--vscode-panel-border); padding-top: 8px; }
-.shortcuts ul { margin: 6px 0; padding-left: 18px; }
-.diagramSvg { width: 100%; max-width: 340px; display: block; }
-.diagramSvg .edge { stroke: var(--vscode-foreground); stroke-width: 1.4; fill: none; }
-.diagramSvg .node rect {
-  fill: var(--vscode-editor-inactiveSelectionBackground);
-  stroke: var(--vscode-foreground);
+.diagramCanvas:focus-visible { outline: 2px solid var(--vscode-focusBorder, #63b7c5); outline-offset: 2px; }
+.diagramCanvas .sequenceDiagram { margin-inline: 0; }
+.requestCountingGuide { margin-block: var(--cnvs-sys-gap-sm); }
+.requestCountingGuide h4 { margin: 12px 0 4px; font-size: inherit; }
+.requestCountingGuide p { margin-block: 6px; }
+.requestCountingGuide ol { padding-inline-start: 22px; }
+.requestCountingGuide li { margin-block: 6px; }
+
+
+/* The response mode stays visible while the answer is read or the sidebar is restored. */
+#solveBtn.solverModeSelected, #solveDirectBtn.solverModeSelected {
+  background: var(--cnvs-sys-color-action-primary-bg);
+  color: var(--cnvs-sys-color-action-primary-fg);
+  border-color: var(--cnvs-sys-color-action-primary-bg);
+  font-weight: var(--cnvs-sys-font-weight-bold);
 }
-.diagramSvg .node text { fill: var(--vscode-foreground); font-size: 10px; }
-.diagramSvg .node .nodeKind { font-size: 7.5px; letter-spacing: 1px; opacity: 0.75; }
-.diagramSvg .node.kind-endpoint rect, .diagramSvg .node.kind-method rect {
-  fill: var(--vscode-foreground);
-}
-.diagramSvg .node.kind-endpoint text, .diagramSvg .node.kind-method text {
-  fill: var(--vscode-editor-background);
-}
-footer { margin-top: 16px; border-top: 1px solid var(--vscode-panel-border); padding-top: 8px; }
-.timer input { width: 48px; }
-.layers label { font-size: 0.9em; }
+#solverResult { margin-block-start: 14px; padding-block-start: 10px; border-block-start: 1px solid var(--cnvs-sys-color-border-divider); }
+#solverResult:empty { margin: 0; padding: 0; border: 0; }
+#solverResult .solverLine { margin-block: 8px; line-height: 1.5; }
+#solverResult .solverEvidence { margin-block-start: 14px; }
+.solverConfidence { display: inline-block; margin-inline-start: 7px; padding: 0 6px; border: 1px solid var(--cnvs-sys-color-border-strong); border-radius: 8px; font-size: 0.8em; font-weight: 500; color: var(--cnvs-sys-color-text-muted); }
+#solverQuestionBox { margin-block-start: 14px; }
+#solverCheckResult:not(:empty) { margin-block-start: 10px; }
+.reviewQuestion { margin-block: 12px; padding-block-end: 10px; border-block-end: 1px solid var(--cnvs-sys-color-border-divider); }
+.reviewQuestion:last-child { border-block-end: 0; padding-block-end: 0; }
+.reviewQuestion p { margin-block: 4px; }
+
+.solverConfidence:focus-visible { outline: 2px solid var(--cnvs-sys-color-focus-ring); outline-offset: 2px; }
+
+.drillOption { display:grid; grid-template-columns:minmax(140px, 190px) minmax(0, 1fr); align-items:start; gap:12px; margin:10px 0; }
+.drillOption button { width:100%; }
+.cardPractice:not(:empty) { margin-top:16px; padding-top:12px; border-top:1px solid var(--vscode-panel-border); }
+@media (max-width: 340px) { .drillOption { grid-template-columns:1fr; gap:4px; } }
+
+.solverHeader { appearance:none; background:transparent; border:0; padding:0; color:inherit; font-weight:700; text-decoration:underline dotted; cursor:pointer; }
+.solverHeader:hover, .solverHeader:focus-visible { color:var(--vscode-textLink-foreground); }
+
+.diagramFamilies { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; margin-bottom:12px; }
+.diagramFamilies label { display:flex; flex-direction:column; gap:5px; min-width:0; }
+.diagramFamilies select { width:100%; min-width:0; }
+
+/* Experiment badge must never wrap letter by letter */
+.ideaMetaRow { flex-wrap: wrap; }
+.ideaBadge { flex: none; white-space: nowrap; align-self: flex-start; }
+/* Solve chat */
+.chatLog { display: flex; flex-direction: column; gap: 8px; max-height: 340px; overflow-y: auto; margin-block: 8px; }
+.cursorPaste { margin-top: 10px; margin-bottom: 0; }
+.cursorPasteBody label { display: block; margin-top: 6px; font-size: 12px; }
+.cursorPasteBody textarea,
+.cursorPasteBody input[type="text"] { width: 100%; box-sizing: border-box; margin-top: 4px; }
+.briefIn30s { margin: 8px 0; padding: 8px; border-left: 3px solid var(--vscode-textLink-foreground, #4da3ff); }
+.briefIn30s p { margin: 0 0 6px; }
+.engagementLine { font-weight: 600; margin: 0 0 8px; }
+#testMapBlock.cnvs-card-inset { margin-top: 8px; padding: 0; border: none; background: transparent; }
+#testMapBlock[hidden] { display: none !important; }
+.testMapNote { margin: 0 0 8px; }
+.testMapSetup { margin: 0 0 8px; font-size: 12px; }
+.testMapList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.testMapJump { font: inherit; text-align: left; padding: 4px 8px; border-radius: 6px; border: 1px solid var(--vscode-button-border, #555); background: var(--vscode-button-secondaryBackground, #333); cursor: pointer; width: 100%; }
+.testMapJump:hover { background: var(--vscode-button-secondaryHoverBackground, #444); }
+.testMapAsserts { margin: 4px 0 0; padding-left: 12px; font-size: 11px; }
+.chatEngagement { margin-top: 6px; font-size: 12px; }
+.chatMsg { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--vscode-editorWidget-border, #444); user-select: text; }
+.chatMsg p { margin: 0 0 6px; }
+.chatMsg pre { margin: 4px 0; padding: 6px; overflow-x: auto; background: var(--vscode-textCodeBlock-background, #222); border-radius: 6px; }
+.chat-user { align-self: flex-start; max-width: 100%; background: var(--vscode-editorWidget-background, #222); }
+.chatQuestionLabel { display: block; font-size: 12px; margin-bottom: 4px; color: var(--vscode-descriptionForeground); }
+.chatSources { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 4px; }
+.chatSource { font-size: 11px; padding: 0 6px; }
+.chatModes .isActive { font-weight: 700; }
+.chatShell textarea, #ideaOwn { width: 100%; box-sizing: border-box; }
+.chatFlow { align-items: center; margin-top: 6px; }
+.ideaSparks { margin: 4px 0 8px; padding-left: 18px; }
+
+.editProposal { margin-top: 8px; padding: 6px; border: 1px solid var(--vscode-editorWidget-border, #444); border-radius: 6px; }
+.editDiff { white-space: pre-wrap; font-size: 12px; max-height: 220px; overflow: auto; }
+
+.chatBox { border: 1px solid var(--vscode-editorWidget-border, #555); border-radius: 12px; padding: 8px; background: var(--vscode-input-background, #151515); }
+.chatBox textarea { border: 0; outline: 0; resize: vertical; min-height: 150px; background: transparent; color: inherit; font: inherit; }
+.chatBar { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; }
+.chatBarStart { display: flex; align-items: center; gap: 6px; justify-content: flex-start; }
+.chatBarEnd { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+.chatRound { border-radius: 50%; width: 30px; height: 30px; padding: 0; font-size: 16px; line-height: 1; }
+.chatSendArrow { background: #3fb950; color: #04130a; border-color: transparent; }
+.chatSendArrow:disabled { opacity: .5; }
+.chatModeLabel { font-size: 12px; color: var(--vscode-descriptionForeground); }
+.chatModeLabel.isActive { color: inherit; font-weight: 700; }
+.pipSwitch { position: relative; width: 36px; height: 20px; padding: 0; border-radius: 10px; border: 1px solid var(--vscode-editorWidget-border, #666); background: #444; cursor: pointer; }
+.pipSwitch[aria-checked="true"] { background: #3fb950; }
+.pipSwitchThumb { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.pipSwitch[aria-checked="true"] .pipSwitchThumb { transform: translateX(16px); }
+.pipSwitch:focus-visible { outline: 2px solid var(--vscode-focusBorder, #4da3ff); outline-offset: 2px; }
+
+/* Pair/Vibe switch drawn to the Canvas Kit Switch measurements: 32x16 track, 12px thumb, 2px inset, 16px travel. */
+.pipSwitch { width: 32px; height: 16px; padding: 0 2px; border: 0; border-radius: 999px; background: #a1aab3; display: inline-flex; align-items: center; transition: background-color 200ms ease; }
+.pipSwitch[aria-checked="true"] { background: #0875e1; }
+.pipSwitchThumb { position: static; width: 12px; height: 12px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.35); transition: transform 150ms ease; transform: translateX(0); }
+.pipSwitch[aria-checked="true"] .pipSwitchThumb { transform: translateX(16px); }
+.pipSwitch:focus-visible { outline: 2px solid #fff; outline-offset: 2px; box-shadow: 0 0 0 4px #0875e1; }
+
+/* Switch, matching the Canvas Kit preview Switch: dark track with an x when off, blue with a tick when on.
+   The button selector beats the sidebar's global button sizing, which was stretching it. */
+button.pipSwitch { box-sizing: border-box; flex: none; position: relative; width: 36px; height: 22px; min-width: 0; min-height: 0; margin: 0; padding: 0 3px; border: 0; border-radius: 999px; background: #5b6068; display: inline-flex; align-items: center; }
+button.pipSwitch[aria-checked="true"] { background: #0875e1; }
+button.pipSwitch .pipSwitchThumb { position: static; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.4); transform: translateX(0); transition: transform 150ms ease; }
+button.pipSwitch[aria-checked="true"] .pipSwitchThumb { transform: translateX(14px); }
+button.pipSwitch::after { content: '\00d7'; position: absolute; right: 7px; top: 50%; transform: translateY(-52%); font-size: 14px; line-height: 1; color: #fff; pointer-events: none; }
+button.pipSwitch[aria-checked="true"]::after { content: '\2713'; right: auto; left: 7px; font-size: 11px; }
+.chatBarEnd { gap: 8px; }
+
+/* Pair and Vibe are two equal modes, not on/off: no tick, no cross, same track colour in both positions. */
+button.pipSwitch::after, button.pipSwitch[aria-checked="true"]::after { content: none; }
+button.pipSwitch, button.pipSwitch[aria-checked="true"] { background: #5b6068; }
+
+/* Send arrow: a lighter grey, not green. */
+.chatSendArrow { background: #8a9099; color: #121212; border-color: transparent; }
+.chatSendArrow:hover:not(:disabled) { background: #a1a7af; }
+
+/* The global button style centres content, which pushed the thumb off its end stops. */
+button.pipSwitch { justify-content: flex-start; }
+.chatSendArrow { background: #4a4f57; color: #e8e8e8; }
+.chatSendArrow:hover:not(:disabled) { background: #5b6068; }
+
+.chatBox textarea { min-height: 64px; }
+
+/* Cursor-style chat: small input, your message shrinks, the reply gets the room. */
+.chatBox textarea { min-height: 40px; }
+.chatLog { max-height: 75vh; }
+.chatClamp { cursor: pointer; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; font-size: 12px; opacity: .85; }
+.chatClamp.chatOpen { display: block; -webkit-line-clamp: unset; }
+.chatMsg ul { margin: 0 0 6px; padding-left: 18px; }
+.chat-assistant { border: 0; padding-inline: 2px; }
+.chatMsg code { font-family: var(--vscode-editor-font-family, monospace); background: var(--vscode-textCodeBlock-background, #222); padding: 0 3px; border-radius: 3px; }
+
+/* Messages never shrink below their content; the clamped question keeps three readable lines. */
+.chatLog > * { flex: none; }
+.chatClamp { min-height: 4.2em; max-height: 4.2em; line-height: 1.4; box-sizing: border-box; }
+.chatClamp.chatOpen { max-height: none; }
+
+/* Query performance cards (Visualise > Performance for SQL) */
+.diagramSvg.costMapDiagram { width: 100%; height: auto; }
+.costMapDiagram .costShape { fill: var(--cnvs-sys-color-surface-alt); stroke: var(--cnvs-sys-color-border-strong); stroke-width: 1; }
+.costMapDiagram .costBar { fill: var(--cnvs-sys-color-border-strong); }
+.costMapDiagram .tone-risk .costBar { fill: #ed7070; }
+.costMapDiagram .tone-watch .costBar { fill: var(--cnvs-sys-color-caution); }
+.costMapDiagram .tone-good .costBar { fill: #49bd7b; }
+.costMapDiagram .costTag { font-size: 9px; font-weight: 700; letter-spacing: 0.08em; fill: var(--cnvs-sys-color-text-muted); }
+.costMapDiagram .tone-risk .costTag { fill: #ed7070; }
+.costMapDiagram .tone-watch .costTag { fill: var(--cnvs-sys-color-caution); }
+.costMapDiagram .tone-good .costTag { fill: #49bd7b; }
+.costMapDiagram .costTitle { font-size: 14px; font-weight: 600; fill: var(--cnvs-sys-color-text-strong); }
+.costMapDiagram .costSnippet { font-size: 11px; font-family: var(--cnvs-sys-font-family-mono); fill: var(--cnvs-sys-color-text-muted); }
+.costMapDiagram .costBody { font-size: 12px; fill: var(--cnvs-sys-color-text-default); }

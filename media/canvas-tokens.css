@@ -1,0 +1,104 @@
+/**
+ * Workday Canvas Kit v14 Design Tokens (Base + System)
+ * Adapted for VS Code / Cursor Webview Light & Dark Themes
+ */
+:root {
+  /* Base 8pt Grid & Sizing Scale */
+  --cnvs-base-unit: 0.25rem;
+  --cnvs-base-size-0: 0;
+  --cnvs-base-size-25: 0.125rem;  /* 2px */
+  --cnvs-base-size-50: 0.25rem;   /* 4px */
+  --cnvs-base-size-75: 0.375rem;  /* 6px */
+  --cnvs-base-size-100: 0.5rem;   /* 8px */
+  --cnvs-base-size-125: 0.625rem; /* 10px */
+  --cnvs-base-size-150: 0.75rem;  /* 12px */
+  --cnvs-base-size-175: 0.875rem; /* 14px */
+  --cnvs-base-size-200: 1rem;     /* 16px */
+  --cnvs-base-size-225: 1.125rem; /* 18px */
+  --cnvs-base-size-250: 1.25rem;  /* 20px */
+  --cnvs-base-size-300: 1.5rem;   /* 24px */
+  --cnvs-base-size-350: 1.75rem;  /* 28px */
+  --cnvs-base-size-400: 2rem;     /* 32px */
+  --cnvs-base-size-500: 2.5rem;   /* 40px */
+  --cnvs-base-size-600: 3rem;     /* 48px */
+
+  /* Canvas Kit System Gap Tokens */
+  --cnvs-sys-gap-none: var(--cnvs-base-size-0);
+  --cnvs-sys-gap-xs: var(--cnvs-base-size-50);    /* 4px */
+  --cnvs-sys-gap-sm: var(--cnvs-base-size-100);   /* 8px */
+  --cnvs-sys-gap-md: var(--cnvs-base-size-200);   /* 16px */
+  --cnvs-sys-gap-lg: var(--cnvs-base-size-300);   /* 24px */
+  --cnvs-sys-gap-xl: var(--cnvs-base-size-400);   /* 32px */
+
+  /* Canvas Kit System Padding Tokens */
+  --cnvs-sys-padding-none: var(--cnvs-base-size-0);
+  --cnvs-sys-padding-xxs: var(--cnvs-base-size-50);  /* 4px */
+  --cnvs-sys-padding-xs: var(--cnvs-base-size-100);  /* 8px */
+  --cnvs-sys-padding-sm: var(--cnvs-base-size-150);  /* 12px */
+  --cnvs-sys-padding-md: var(--cnvs-base-size-200);  /* 16px */
+  --cnvs-sys-padding-lg: var(--cnvs-base-size-250);  /* 20px */
+  --cnvs-sys-padding-xl: var(--cnvs-base-size-300);  /* 24px */
+
+  /* Canvas Kit System Shape Tokens */
+  --cnvs-sys-shape-zero: 0;
+  --cnvs-sys-shape-half: 0.125rem;
+  --cnvs-sys-shape-sm: var(--cnvs-base-size-50);     /* 4px */
+  --cnvs-sys-shape-md: var(--cnvs-base-size-100);    /* 8px */
+  --cnvs-sys-shape-x2: calc(var(--cnvs-base-unit) * 2); /* 8px - Cards, Modals, Popups */
+  --cnvs-sys-shape-x3: calc(var(--cnvs-base-unit) * 3); /* 12px */
+  --cnvs-sys-shape-x4: calc(var(--cnvs-base-unit) * 4); /* 16px */
+  --cnvs-sys-shape-round: 999px;                     /* Pill buttons & badges */
+
+  /* Canvas Kit Typography Tokens */
+  --cnvs-sys-font-family-default: var(--vscode-font-family, "Roboto", -apple-system, BlinkMacSystemFont, sans-serif);
+  --cnvs-sys-font-family-mono: var(--vscode-editor-font-family, "Roboto Mono", ui-monospace, SFMono-Regular, monospace);
+  --cnvs-sys-font-weight-light: 300;
+  --cnvs-sys-font-weight-normal: 400;
+  --cnvs-sys-font-weight-medium: 500;
+  --cnvs-sys-font-weight-bold: 700;
+
+  --cnvs-sys-font-size-subtext-sm: 0.6875rem; /* 11px */
+  --cnvs-sys-font-size-subtext-md: 0.75rem;   /* 12px */
+  --cnvs-sys-font-size-body-sm: 0.8125rem;    /* 13px */
+  --cnvs-sys-font-size-body-md: 0.875rem;     /* 14px */
+  --cnvs-sys-font-size-heading-sm: 0.9375rem; /* 15px */
+  --cnvs-sys-font-size-heading-md: 1.0625rem; /* 17px */
+  --cnvs-sys-font-size-title-sm: 1.375rem;    /* 22px */
+
+  --cnvs-sys-line-height-subtext-md: 1.125rem;
+  --cnvs-sys-line-height-body-sm: 1.3rem;
+  --cnvs-sys-line-height-body-md: 1.45rem;
+  --cnvs-sys-line-height-heading-sm: 1.35rem;
+  --cnvs-sys-line-height-title-sm: 1.75rem;
+
+  /* Canvas Kit Motion & Elevation Tokens */
+  --cnvs-sys-motion-easing-quick: cubic-bezier(0.2, 0, 0.2, 1);
+  --cnvs-sys-depth-1: 0 1px 4px 0 rgba(0, 0, 0, 0.18), 0 2px 8px 0 rgba(0, 0, 0, 0.12);
+  --cnvs-sys-depth-2: 0 2px 8px 0 rgba(0, 0, 0, 0.22), 0 4px 16px 0 rgba(0, 0, 0, 0.14);
+  --cnvs-sys-depth-4: 0 6px 20px 0 rgba(0, 0, 0, 0.36), 0 12px 32px 0 rgba(0, 0, 0, 0.24);
+
+  /* Canvas Kit Semantic Surface & Text Colors (bound to editor theme with Canvas fallbacks) */
+  --cnvs-sys-color-bg-default: var(--vscode-sideBar-background, var(--vscode-editor-background, #181a1f));
+  --cnvs-sys-color-surface-default: color-mix(in srgb, var(--vscode-editor-background, #1e2026) 86%, var(--vscode-foreground, #ffffff) 4%);
+  --cnvs-sys-color-surface-alt: color-mix(in srgb, var(--vscode-editor-background, #1e2026) 76%, var(--vscode-foreground, #ffffff) 8%);
+  --cnvs-sys-color-surface-hover: color-mix(in srgb, var(--vscode-editor-background, #1e2026) 68%, var(--vscode-foreground, #ffffff) 12%);
+  --cnvs-sys-color-surface-popover: var(--vscode-editorWidget-background, #22252c);
+
+  --cnvs-sys-color-border-container: color-mix(in srgb, var(--vscode-foreground, #ffffff) 13%, transparent);
+  --cnvs-sys-color-border-divider: color-mix(in srgb, var(--vscode-foreground, #ffffff) 9%, transparent);
+  --cnvs-sys-color-border-strong: color-mix(in srgb, var(--vscode-foreground, #ffffff) 26%, transparent);
+
+  --cnvs-sys-color-text-stronger: var(--vscode-foreground, #f5f6f8);
+  --cnvs-sys-color-text-strong: color-mix(in srgb, var(--vscode-foreground, #f5f6f8) 92%, transparent);
+  --cnvs-sys-color-text-default: color-mix(in srgb, var(--vscode-foreground, #f5f6f8) 84%, transparent);
+  --cnvs-sys-color-text-muted: var(--vscode-descriptionForeground, #9aa2b1);
+
+  --cnvs-sys-color-action-primary-bg: var(--vscode-foreground, #f0f2f5);
+  --cnvs-sys-color-action-primary-fg: var(--vscode-editor-background, #14161a);
+  --cnvs-sys-color-action-primary-hover: color-mix(in srgb, var(--vscode-foreground, #f0f2f5) 86%, transparent);
+
+  --cnvs-sys-color-focus-ring: var(--vscode-focusBorder, #0875e1);
+  --cnvs-sys-color-positive: var(--vscode-charts-green, #2e8540);
+  --cnvs-sys-color-caution: var(--vscode-editorWarning-foreground, #e0a82e);
+  --cnvs-sys-color-critical: var(--vscode-errorForeground, #d9383a);
+}

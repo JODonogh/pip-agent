@@ -1,0 +1,14 @@
+.agents/**
+.vscode/**
+src/**
+node_modules/**
+tsconfig.json
+package-lock.json
+*.vsix
+dist/**
+scripts/**
+.idea/**
+.env
+.env.*
+**/.env
+**/.env.*
