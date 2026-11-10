@@ -10,6 +10,7 @@ import {
   evaluateQuickFire,
   firstAppFrame,
   MAX_DEPTH,
+  normalizeCurriculumFacet,
   parseAiLabCard,
   parseApproaches,
   parseDrillVerdict,
@@ -58,6 +59,7 @@ import { extractKeywords } from './learning/keywords';
 import { setEvaluatorDiagnostics } from './platform/diagnostics';
 import { InferenceQueue } from './platform/inference-queue';
 import { fetchReference, topicFor, rootsWebPrompt, acceptRoots } from './platform/webroots';
+import { CURRICULUM_BITES, curriculumPayload } from './learning/ai-curriculum';
 import { evaluateDeep, preparedDeep, guardExplanation, glossaryDefinition, evaluateLearningReview, dropEchoChunks, type LearningReview } from './learning/learning-quality';
 import { verifyIdeas, usefulExperiment, experimentScaffolds, metaphorScaffold, type IdeaVerification } from './ideation/ideation';
 import { evaluateSolver, solverInput, solverKeywords, restoredSolverContext, type SolverInput, type EvaluatedSolverReply } from './solver/solver';
@@ -744,6 +746,10 @@ export function activate(context: vscode.ExtensionContext): void {
           });
           break;
         }
+        case 'getAiCurriculum': {
+          transport.post({ type: 'aiCurriculum', ...curriculumPayload() });
+          break;
+        }
         case 'getAvailableModels': {
           const config = vscode.workspace.getConfiguration();
           const provider = new OllamaProvider(config.get<string>('pip.ollamaUrl', 'http://127.0.0.1:11434'));
@@ -768,20 +774,36 @@ export function activate(context: vscode.ExtensionContext): void {
           const config = vscode.workspace.getConfiguration();
           const requested = String(message['model'] ?? '').trim();
           const activeModel = requested || config.get<string>('pip.model', 'qwen2.5-coder:3b');
+          const biteId = String(message['biteId'] ?? '').trim();
+          const bite = CURRICULUM_BITES.find((item) => item.id === biteId);
           try {
             transport.post({ type: 'aiLabTelemetry', model: activeModel, text: 'Starting local inference…' });
             const result = await runWorker(
               'aiLab',
               'pip.reasoningModel',
-              aiLabPrompt(query, activeModel, codeContext),
+              aiLabPrompt(
+                query,
+                bite?.facet ?? normalizeCurriculumFacet(String(message['facet'] ?? 'all')),
+                activeModel,
+                codeContext,
+              ),
               { priority: 'foreground', model: activeModel },
             );
             const card = parseAiLabCard(result.text);
-            const parts = [
-              { title: '1. The AI Concept (60 Seconds)', body: card.concept },
-              { title: '2. How PIP Demonstrates or Violates This', body: card.wherePip },
-              { title: '3. 15-Minute Code Experiment', body: card.experiment },
-            ].filter((part) => part.body.trim());
+            const isMicroCard = Boolean(card.analogy.trim() || card.knowledgeCheck.trim());
+            const parts = (isMicroCard
+              ? [
+                  { title: '💡 The Big Idea', body: card.concept },
+                  { title: '🔍 Everyday Analogy', body: card.analogy },
+                  { title: '🎯 Quick Knowledge Check', body: card.knowledgeCheck },
+                  { title: '🛠️ PIP Connection or Hack', body: card.wherePip },
+                ]
+              : [
+                  { title: '1. The AI Concept (60 Seconds)', body: card.concept },
+                  { title: '2. How PIP Demonstrates or Violates This', body: card.wherePip },
+                  { title: '3. 15-Minute Code Experiment', body: card.experiment },
+                ]
+            ).filter((part) => part.body.trim());
             transport.post({
               type: 'aiLabReply',
               headline: card.concept.split('\n').find((line) => line.trim())?.trim() || query,

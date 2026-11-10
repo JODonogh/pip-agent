@@ -16,9 +16,13 @@ export const SHORTCUTS_HTML = `<details class="shortcuts">
 const CONTROL_HELP: Record<string, string> = {
   explainBtn: 'Explain the code currently selected in the editor.',
   markBtn: 'Keep this idea in Review so you can practise recalling it later.',
+  aiBtn: 'Open or close the AI Lab micro-lesson studio.',
+  pipAiLabCloseBtn: 'Collapse the AI Lab drawer.',
   pipReadBtn: 'Read the current explanation aloud; click again to stop.',
-  timerBtn: 'Start or stop a timebox for this session.',
-  reexplainBtn: 'Explain the captured code selection again.',
+  pipStartBtn: 'Start or stop a timebox for this session.',
+  pipMuteBtn: 'Mute or unmute timebox completion and voice feedback sounds.',
+  pipMusicBtn: 'Toggle gentle ambient focus audio during the session.',
+  pipResetBtn: 'Stop the timebox and explain the captured selection again.',
   visualiseBtn: 'Build diagrams from the current editor selection.',
   loadCoverageBtn: 'Load a local coverage report to colour only branches backed by report evidence.',
   diagramAskBtn: 'Ask about the current diagram using its code and visible relationships.',
@@ -70,11 +74,11 @@ function withControlHelp(markup: string): string {
     if (tag === 'button') {
       // Only icon-only buttons need a tooltip; a visible text label already says what the button does.
       const visible = body.replace(/<[^>]*>/g, '').replace(/&[#\w]+;/g, '');
-      if (!/class="[^"]*iconBtn/.test(attrs) && /[A-Za-z]/.test(visible)) return `<button${attrs.replace(/\s*\btitle="[^"]*"/, '')}>${body}</button>`;
+      if (!/class="[^"]*(?:iconBtn|pip-icon-btn)/.test(attrs) && /[A-Za-z]/.test(visible)) return `<button${attrs.replace(/\s*\btitle="[^"]*"/, '')}>${body}</button>`;
     }
     if (/\btitle=/.test(attrs)) {
       const title = /\btitle="([^"]+)"/.exec(attrs)?.[1] || '';
-      return tag === 'button' && !/aria-label=/.test(attrs) && /class="[^"]*iconBtn/.test(attrs)
+      return tag === 'button' && !/aria-label=/.test(attrs) && /class="[^"]*(?:iconBtn|pip-icon-btn)/.test(attrs)
         ? `<${tag} aria-label="${title}"${attrs}>${body}</${tag}>` : whole;
     }
     const id = /\bid="([^"]+)"/.exec(attrs)?.[1];
@@ -95,32 +99,47 @@ export const LEARN_BODY = withControlHelp(`
     <div class="topGrid">
       <button id="explainBtn">Select</button>
       <button id="markBtn" title="Keep this idea in Review so you can practise it later">Keep</button>
-      <button id="aiBtn">AI</button>
+      <button id="aiBtn" type="button" aria-expanded="false" aria-controls="pipAiLab">AI</button>
     </div>
-    <div class="timerGrid">
-      <span class="timerLabel">Timebox</span>
-      <input id="timerMin" type="number" value="10" min="1" max="120" title="Minutes (session only, never saved)">
-      <button id="timerBtn">Start</button>
-      <button id="pipReadBtn" class="pip-icon-btn" title="Read aloud (TTS)" aria-label="Read aloud">&#128266;</button>
-      <span id="timerOut" class="muted" role="status" aria-live="polite"></span>
-      <div class="quickIconRow">
-        <button id="timerSoundBtn" class="iconBtn" title="Mute timebox completion sound" aria-label="Mute timebox completion sound" aria-pressed="false">&#9835;</button>
-        <button id="reexplainBtn" class="iconBtn" title="Explain the captured code selection again" aria-label="Explain this selection again">&#8635;</button>
+    <div class="pip-toolbar-row">
+      <span class="pip-toolbar-label">Timebox</span>
+      <input type="number" id="pipTimeboxInput" class="pip-input-compact" value="10" min="1" max="60" aria-label="Minutes" title="Minutes (session only, never saved)">
+      <button id="pipStartBtn" class="pip-btn pip-btn-sm" type="button">Start</button>
+      <span id="timerOut" class="pip-toolbar-status muted" role="status" aria-live="polite"></span>
+      <div class="pip-toolbar-actions">
+        <button id="pipReadBtn" class="pip-icon-btn" type="button" title="Read aloud (TTS)" aria-label="Read aloud">&#128266;</button>
+        <button id="pipMuteBtn" class="pip-icon-btn" type="button" title="Mute/Unmute voice feedback" aria-label="Voice" aria-pressed="false">&#128265;</button>
+        <button id="pipMusicBtn" class="pip-icon-btn" type="button" title="Ambient focus audio" aria-label="Audio" aria-pressed="false">&#127925;</button>
+        <button id="pipResetBtn" class="pip-icon-btn" type="button" title="Reset session" aria-label="Reset">&#8635;</button>
       </div>
     </div>
   </section>
 
-  <div class="pip-ai-lab-container" id="pipAiLab">
+  <div class="pip-ai-lab-container" id="pipAiLab" hidden>
     <div class="pip-ai-lab-header">
-      <div class="pip-ai-lab-title-row">
-        <span class="pip-ai-lab-title">&#129514; AI Lab &middot; 15m Micro-Lesson &amp; Experiment</span>
-        <select id="pipModelSelector" class="pip-select" title="Active Ollama Model">
+      <span class="pip-ai-lab-title">&#129514; AI Lab &middot; Duolingo-Style Micro-Lessons</span>
+      <div class="pip-ai-lab-header-actions">
+        <select id="pipModelSelector" class="pip-select-compact" title="Active Model">
           <option value="qwen2.5-coder:14b">Loading models&hellip;</option>
         </select>
+        <button id="pipAiLabCloseBtn" class="pip-icon-btn" type="button" title="Collapse AI Lab" aria-label="Collapse AI Lab">&#8963;</button>
       </div>
       <div id="pipModelMetrics" class="pip-metrics-bar" hidden>
         <span id="pipMetricTps">-- tok/s</span> &middot; <span id="pipMetricLatency">-- ms</span>
       </div>
+    </div>
+
+    <div class="pip-curriculum-bar">
+      <button id="pipNextBiteBtn" type="button" class="pip-btn pip-btn-accent">&#127922; Next Bite</button>
+      <label class="pip-sr-only" for="pipAiFacetSelect">Curriculum facet</label>
+      <select id="pipAiFacetSelect" class="pip-select-compact" title="Filter bites by AI topic">
+        <option value="all">&#127760; All Facets</option>
+        <option value="history">&#127963;&#65039; History &amp; Breakthroughs</option>
+        <option value="architecture">&#129504; Architectures &amp; Attention</option>
+        <option value="learning">&#127919; Reinforcement &amp; Learning</option>
+        <option value="inference">&#9889; Inference &amp; Compute</option>
+        <option value="alignment">&#128737;&#65039; Alignment &amp; Cognition</option>
+      </select>
     </div>
 
     <div class="pip-ai-lab-input-row">
@@ -128,16 +147,9 @@ export const LEARN_BODY = withControlHelp(`
         type="text"
         id="pipAiLabInput"
         class="pip-input"
-        placeholder="Ask AI theory or type a PIP code hack (15m lesson)&hellip;"
+        placeholder="Ask any AI concept, history, or PIP hack&hellip;"
       />
-      <button id="pipAiLabSubmit" class="pip-btn pip-btn-primary">Explore</button>
-    </div>
-
-    <div class="pip-ai-lab-chips">
-      <button type="button" class="pip-chip" data-query="Explain the Pink Elephant problem and why negative prompts fail in 7B/14B models">Pink Elephant Trap</button>
-      <button type="button" class="pip-chip" data-query="Compare Actor-Critic RL vs Model-Free Q-Learning in code assistants">Actor-Critic vs Q-Learning</button>
-      <button type="button" class="pip-chip" data-query="How do Attention Heads and Temperature affect AST generation?">Attention &amp; Softmax</button>
-      <button type="button" class="pip-chip" data-query="Compare how Qwen 1.5B vs DeepSeek 8B reasoning tokens approach debugging">Test-Time Compute</button>
+      <button id="pipAiLabSubmit" type="button" class="pip-btn pip-btn-primary">Learn</button>
     </div>
 
     <div id="pipAiLabOutput" class="pip-ai-lab-output" hidden></div>

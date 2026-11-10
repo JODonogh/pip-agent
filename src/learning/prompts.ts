@@ -294,28 +294,41 @@ export function drillPrompt(concept: Concept): ChatMessage[] {
   ];
 }
 
-/** 15-minute micro-lesson for the AI Lab — three fixed sections grounded in Agent PIP source. */
-export function aiLabPrompt(query: string, modelName: string, ctx?: CodeContext | null): ChatMessage[] {
+/** Duolingo / Brilliant micro-card for the AI Lab — four fixed sections plus a knowledge check. */
+export function aiLabPrompt(
+  query: string,
+  facet: string,
+  modelName: string,
+  ctx?: CodeContext | null,
+): ChatMessage[] {
+  const track = facet.trim() || 'all';
+  const editor = ctx
+    ? `Open editor context (${ctx.file}:${ctx.line}):\n\`\`\`\n${ctx.selection.slice(0, 800)}\n\`\`\``
+    : '';
   return [
     {
       role: 'system',
       content:
-        'You are an AI research scientist and principal engineer mentoring a developer on LLM internals, prompt engineering, and agent architecture through their own VS Code extension codebase (Agent PIP). ' +
-        'Answer the user question concisely in EXACTLY this 3-part markdown format:\n\n' +
-        '### 1. The AI Concept (60 Seconds)\n' +
-        '<Crisp conceptual definition under 80 words: attention heads, loss, tokenization, reasoning tokens, temperature, or similar. Use plain words, not filler.>\n\n' +
-        '### 2. How PIP Demonstrates or Violates This\n' +
-        '<Cite a relevant Agent PIP file and path (e.g. src/agents/prompts.ts, src/learning/learning-quality.ts, src/platform/provider.ts, src/shared/evaluator.ts) and explain where this codebase demonstrates or violates the concept in concrete terms.>\n\n' +
-        '### 3. 15-Minute Code Experiment\n' +
-        '<Give ONE concrete experiment the user can try in Agent PIP right now: a 5–10 line change or prompt tweak they can run and observe. No multi-hour projects.>',
+        'You are an interactive AI educator in the style of Brilliant.org and Duolingo. ' +
+        'Provide a punchy, engaging micro-lesson (under 160 words total, excluding the MCQ labels) in EXACTLY this format:\n\n' +
+        '### 💡 The Big Idea (30s Read)\n' +
+        '<2-3 sentences explaining the intuition and mechanism without jargon walls.>\n\n' +
+        '### 🔍 Everyday Analogy\n' +
+        '<One vivid real-world comparison that makes the concept click immediately.>\n\n' +
+        '### 🎯 Quick Knowledge Check\n' +
+        '**Question:** <One scenario-style multiple-choice question testing intuition>\n' +
+        'A) <Option>\nB) <Option>\nC) <Option>\n' +
+        '<details><summary>👉 Reveal Answer & Why</summary>**Answer:** <Letter> — <One-sentence breakdown></details>\n\n' +
+        '### 🛠️ PIP Connection or Hack\n' +
+        '<One concrete 2-minute Agent PIP hack: cite a real path under this repo when relevant ' +
+        '(e.g. src/learning/prompts.ts, src/platform/provider.ts, src/shared/evaluator.ts) and one tweak the user can try. ' +
+        'Do not invent files or behaviour.>',
     },
     {
       role: 'user',
       content:
-        `Active Model: ${modelName}\nQuestion: ${query}\n` +
-        (ctx
-          ? `Currently open file: ${ctx.file}:${ctx.line}\n\`\`\`\n${ctx.selection.slice(0, 1000)}\n\`\`\``
-          : 'No active editor selection.'),
+        `Topic/Question: ${query}\nDomain Track: ${track}\nModel: ${modelName}` +
+        (editor ? `\n${editor}` : ''),
     },
   ];
 }

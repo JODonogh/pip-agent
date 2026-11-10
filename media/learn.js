@@ -49,6 +49,60 @@ let duckPending = null;
 let duckSequence = 0;
 let speaking = false;
 let aiLabPending = false;
+/** Client-side rotating concept bank (36 bites, 5 tracks). Host payload refreshes when available. */
+const PIP_CONCEPT_BANK = {
+  facets: [
+    { id: 'all', emoji: '\uD83C\uDF10', label: 'All Facets' },
+    { id: 'history', emoji: '\uD83C\uDFDB\uFE0F', label: 'History & Breakthroughs' },
+    { id: 'architecture', emoji: '\uD83E\uDDE0', label: 'Architectures & Attention' },
+    { id: 'learning', emoji: '\uD83C\uDFAF', label: 'Reinforcement & Learning' },
+    { id: 'inference', emoji: '\u26A1', label: 'Inference & Compute' },
+    { id: 'alignment', emoji: '\uD83D\uDEE1\uFE0F', label: 'Alignment & Cognition' },
+  ],
+  bites: [
+    { id: 'hist-turing', facet: 'history', title: 'Turing Test', query: 'What is the Turing Test checking, and why is it a poor benchmark for modern LLMs?' },
+    { id: 'hist-perceptron', facet: 'history', title: 'Perceptron limits', query: 'Why did the single-layer perceptron trigger the first AI winter, and what changed with backprop?' },
+    { id: 'hist-symbolic', facet: 'history', title: 'Symbolic vs connectionist', query: 'Contrast symbolic AI rule engines with connectionist neural nets on knowledge and generalization.' },
+    { id: 'hist-alexnet', facet: 'history', title: 'AlexNet moment', query: 'What did AlexNet prove about GPUs and deep CNNs in 2012, and how did it reshape ML engineering?' },
+    { id: 'hist-transformer', facet: 'history', title: '2017 Transformer', query: 'What problem did the 2017 Transformer solve that RNNs struggled with, in plain language?' },
+    { id: 'hist-winter', facet: 'history', title: 'AI winters', query: 'What hype-and-funding pattern creates an AI winter, and what broke that cycle after 2012?' },
+    { id: 'hist-scaling', facet: 'history', title: 'Scaling intuition', query: 'Before ChatGPT, what did scaling laws suggest about loss vs compute, and what did skeptics worry about?' },
+    { id: 'arch-ffn', facet: 'architecture', title: 'Feed-forward blocks', query: 'What role do feed-forward sublayers play inside each transformer block?' },
+    { id: 'arch-attention', facet: 'architecture', title: 'Self-attention', query: 'Explain self-attention and softmax scoring with one tiny numeric example.' },
+    { id: 'arch-lstm', facet: 'architecture', title: 'Recurrence / LSTM', query: 'When would an LSTM still be preferable to a transformer for a sequence task?' },
+    { id: 'arch-moe', facet: 'architecture', title: 'Mixture of Experts', query: 'How does mixture-of-experts routing trade capacity for compute per token?' },
+    { id: 'arch-mamba', facet: 'architecture', title: 'State-space / Mamba', query: 'What is a state-space model trying to optimize versus full quadratic attention?' },
+    { id: 'arch-cnn', facet: 'architecture', title: 'Conv nets', query: 'Why do convolutional layers exploit locality and weight sharing, and when do transformers replace them?' },
+    { id: 'arch-rope', facet: 'architecture', title: 'RoPE positions', query: 'How does rotary positional embedding (RoPE) encode token order differently from absolute position vectors?' },
+    { id: 'learn-supervised', facet: 'learning', title: 'Supervised vs unsupervised', query: 'Give a crisp contrast between supervised and unsupervised learning with one code-adjacent example each.' },
+    { id: 'learn-q', facet: 'learning', title: 'Q-learning', query: 'Explain model-free Q-learning in terms of a reward table and where it fails at scale.' },
+    { id: 'learn-actor-critic', facet: 'learning', title: 'Actor-Critic', query: 'Compare actor-critic methods to pure Q-learning for code-assistant tool use.' },
+    { id: 'learn-ppo', facet: 'learning', title: 'PPO', query: 'What problem does PPO solve when fine-tuning a policy with noisy gradients?' },
+    { id: 'learn-dpo', facet: 'learning', title: 'DPO vs RLHF', query: 'How does DPO approximate preference learning without a separate reward model?' },
+    { id: 'learn-backprop', facet: 'learning', title: 'Backpropagation', query: 'Explain backpropagation as credit assignment through a computation graph in one paragraph.' },
+    { id: 'learn-grpo', facet: 'learning', title: 'GRPO sketch', query: 'What is group-relative policy optimization trying to fix compared to vanilla policy gradients on LLMs?' },
+    { id: 'inf-heads', facet: 'inference', title: 'Attention heads', query: 'Why do multi-head attention layers split representation subspaces instead of one big matrix?' },
+    { id: 'inf-kvcache', facet: 'inference', title: 'KV-cache', query: 'What is a KV-cache and why does it dominate latency in long chat sessions?' },
+    { id: 'inf-temperature', facet: 'inference', title: 'Temperature & top-p', query: 'How do temperature and nucleus sampling change token diversity during decoding?' },
+    { id: 'inf-quant', facet: 'inference', title: 'Q4 / Q8 quant', query: 'What accuracy or behavior trade-offs appear when quantizing a 7B model to Q4_K_M?' },
+    { id: 'inf-ttc', facet: 'inference', title: 'Test-time compute', query: 'What are thinking / reasoning tokens at test time, and how do they differ from training compute?' },
+    { id: 'inf-flash', facet: 'inference', title: 'FlashAttention', query: 'What memory bottleneck does FlashAttention remove in standard attention implementations?' },
+    { id: 'inf-speculative', facet: 'inference', title: 'Speculative decode', query: 'How does speculative decoding use a small draft model to speed up a larger target model?' },
+    { id: 'align-pink', facet: 'alignment', title: 'Pink Elephant trap', query: 'Explain the Pink Elephant problem and why negative prompts fail in 7B/14B models.' },
+    { id: 'align-halluc', facet: 'alignment', title: 'Hallucination', query: 'What mechanisms make autoregressive LMs confabulate facts even when loss is low?' },
+    { id: 'align-rlhf', facet: 'alignment', title: 'RLHF sketch', query: 'Outline RLHF as reward model plus policy update, and one failure mode for coding assistants.' },
+    { id: 'align-sycoph', facet: 'alignment', title: 'Sycophancy', query: 'Why do chat models agree with wrong user beliefs, and how would you test for it in an extension?' },
+    { id: 'align-emerge', facet: 'alignment', title: 'Emergence', query: 'What does emergence mean in LLM scaling claims, and what evidence would falsify it?' },
+    { id: 'align-jailbreak', facet: 'alignment', title: 'Jailbreaks', query: 'Why do instruction-tuned models still obey harmful role-play prompts, and what mitigations are weakest?' },
+    { id: 'align-const', facet: 'alignment', title: 'Constitutional AI', query: 'How does constitutional AI use self-critique loops instead of only human preference labels?' },
+    { id: 'align-tools', facet: 'alignment', title: 'Tool hallucination', query: 'When an agent calls tools, what causes fabricated arguments or nonexistent APIs, and how would you test for it?' },
+  ],
+};
+
+let curriculumBites = PIP_CONCEPT_BANK.bites;
+let curriculumFacets = PIP_CONCEPT_BANK.facets;
+let curriculumProgress = { readIds: [], trackIndex: 0, ...(vscode.getState?.() || {}).aiCurriculumProgress };
+let activeCurriculumBiteId = '';
 let timer = null;
 let remaining = 0;
 
@@ -264,6 +318,44 @@ function rich(text, set, options = {}) {
     }
   }
   return frag;
+}
+/** AI Lab bodies may include literal <details> knowledge-check reveals from the model contract. */
+function fillAiLabPartBody(parent, text, set) {
+  const raw = String(text || '');
+  const detailsRe = /<details\b[^>]*>([\s\S]*?)<\/details>/gi;
+  let lastIndex = 0;
+  let match = detailsRe.exec(raw);
+  while (match) {
+    const before = raw.slice(lastIndex, match.index);
+    if (before.trim()) parent.appendChild(rich(before, set));
+    const inner = match[1];
+    const summaryMatch = /<summary\b[^>]*>([\s\S]*?)<\/summary>/i.exec(inner);
+    const details = document.createElement('details');
+    details.className = 'pip-ai-lab-kc';
+    if (summaryMatch) {
+      const summary = document.createElement('summary');
+      summary.textContent = summaryMatch[1].replace(/<[^>]+>/g, '').trim();
+      details.appendChild(summary);
+      const afterSummary = inner.slice(summaryMatch.index + summaryMatch[0].length).trim();
+      if (afterSummary) {
+        const reveal = document.createElement('div');
+        reveal.className = 'pip-ai-lab-kc-reveal';
+        reveal.appendChild(rich(afterSummary, set));
+        details.appendChild(reveal);
+      }
+    } else {
+      const reveal = document.createElement('div');
+      reveal.className = 'pip-ai-lab-kc-reveal';
+      reveal.appendChild(rich(inner.trim(), set));
+      details.appendChild(reveal);
+    }
+    parent.appendChild(details);
+    lastIndex = detailsRe.lastIndex;
+    match = detailsRe.exec(raw);
+  }
+  const tail = raw.slice(lastIndex);
+  if (tail.trim()) parent.appendChild(rich(tail, set));
+  if (!parent.childNodes?.length && !parent.children?.length && raw) parent.appendChild(rich(raw, set));
 }
 function explanationBody(explanation, set) {
   const frag = document.createDocumentFragment();
@@ -1329,10 +1421,18 @@ window.addEventListener('message', (event) => {
     }
   } else if (msg.type === 'availableModels') {
     fillModelSelector(msg.models || [], msg.selected);
+  } else if (msg.type === 'aiCurriculum') {
+    if (Array.isArray(msg.facets) && msg.facets.length) curriculumFacets = msg.facets;
+    if (Array.isArray(msg.bites) && msg.bites.length) curriculumBites = msg.bites;
+    renderCurriculumFacets();
   } else if (msg.type === 'aiLabTelemetry') {
     updateModelMetrics(msg);
     if (aiLabPending) refreshAiLabTelemetry(msg);
   } else if (msg.type === 'aiLabReply') {
+    if (activeCurriculumBiteId && !curriculumProgress.readIds.includes(activeCurriculumBiteId)) {
+      curriculumProgress.readIds = [...curriculumProgress.readIds, activeCurriculumBiteId].slice(-120);
+      vscode.setState?.({ ...(vscode.getState?.() || {}), aiCurriculumProgress: curriculumProgress });
+    }
     renderAiLabReply(msg);
   } else if (msg.type === 'aiLabError') {
     setAiLabLoading(false);
@@ -1817,7 +1917,25 @@ on('explainBtn', 'click', () => {
   $('result').textContent = 'Thinking locally…';
   vscode.postMessage({ type: 'explainSelection' });
 });
-on('reexplainBtn', 'click', () => vscode.postMessage({ type: 'explain' }));
+function resetSession() {
+  if (timer) {
+    clearInterval(timer);
+    timer = null;
+  }
+  clearTimeout(timerPulse);
+  const start = $('pipStartBtn');
+  if (start) {
+    start.textContent = 'Start';
+    start.title = 'Start a new timebox for this session.';
+  }
+  const output = $('timerOut');
+  if (output) {
+    output.textContent = '';
+    output.classList.remove('timeboxComplete');
+  }
+  vscode.postMessage({ type: 'explain' });
+}
+on('pipResetBtn', 'click', resetSession);
 on('helpBtn', 'click', () => vscode.postMessage({ type: 'help' }));
 on('markBtn', 'click', () => vscode.postMessage({ type: 'mark', term: current.term, bottomLine: current.bottomLine }));
 function setReadAloudState(active) {
@@ -1882,7 +2000,7 @@ function refreshAiLabTelemetry(metrics = {}) {
 }
 function aiLabPartRows(msg) {
   if (Array.isArray(msg.parts) && msg.parts.length) {
-    return msg.parts.slice(0, 3).map((part, index) => ({
+    return msg.parts.slice(0, 4).map((part, index) => ({
       title: part.title || `Part ${index + 1}`,
       body: part.body || '',
     }));
@@ -1938,7 +2056,7 @@ function renderAiLabReply(msg) {
     title.textContent = part.title;
     const copy = document.createElement('div');
     copy.className = 'pip-ai-lab-part-body';
-    copy.appendChild(rich(part.body, new Set()));
+    fillAiLabPartBody(copy, part.body, new Set());
     section.append(title, copy);
     body.appendChild(section);
   }
@@ -1956,7 +2074,8 @@ function setAiLabLoading(active) {
   const out = $('pipAiLabOutput');
   const submit = $('pipAiLabSubmit');
   if (submit) submit.disabled = active;
-  document.querySelectorAll('.pip-chip').forEach((chip) => { chip.disabled = active; });
+  const daily = $('pipNextBiteBtn');
+  if (daily) daily.disabled = active;
   if (!out) return;
   if (!active) {
     out.classList.remove('is-pulsing');
@@ -1985,7 +2104,63 @@ function submitAiLabQuery(raw) {
     type: 'askAiLab',
     query,
     model: $('pipModelSelector')?.value || '',
+    biteId: activeCurriculumBiteId || '',
+    facet: $('pipAiFacetSelect')?.value || 'all',
   });
+}
+function bitesForFacet(facet) {
+  if (!facet || facet === 'all') return curriculumBites;
+  return curriculumBites.filter((bite) => bite.facet === facet);
+}
+/** Next unvisited bite in pool order (rotates track cursor). Revisits when every bite in the track was completed. */
+function pickNextConceptBite() {
+  const facet = $('pipAiFacetSelect')?.value || 'all';
+  const pool = bitesForFacet(facet);
+  if (!pool.length) return null;
+  const read = new Set(curriculumProgress.readIds);
+  const start = pool.length ? curriculumProgress.trackIndex % pool.length : 0;
+  for (let step = 0; step < pool.length; step += 1) {
+    const index = (start + step) % pool.length;
+    const bite = pool[index];
+    if (!read.has(bite.id)) {
+      curriculumProgress.trackIndex = (index + 1) % pool.length;
+      return { bite, cycled: false };
+    }
+  }
+  const bite = pool[start];
+  curriculumProgress.trackIndex = (start + 1) % pool.length;
+  return { bite, cycled: true };
+}
+function curriculumSelectOptions(select) {
+  if (!select?.options) return [];
+  try {
+    return Array.from(select.options);
+  } catch {
+    return [];
+  }
+}
+function renderCurriculumFacets() {
+  const select = $('pipAiFacetSelect');
+  if (!select || !curriculumFacets.length || typeof select.replaceChildren !== 'function') return;
+  const prior = select.value || 'all';
+  select.replaceChildren();
+  for (const facet of curriculumFacets) {
+    const opt = document.createElement('option');
+    opt.value = facet.id;
+    opt.textContent = `${facet.emoji} ${facet.label}`;
+    select.appendChild(opt);
+  }
+  const options = curriculumSelectOptions(select);
+  if (options.some((option) => option.value === prior)) select.value = prior;
+}
+function loadDailyBite(autoRun = false) {
+  const picked = pickNextConceptBite();
+  if (!picked?.bite) return;
+  activeCurriculumBiteId = picked.bite.id;
+  vscode.setState?.({ ...(vscode.getState?.() || {}), aiCurriculumProgress: curriculumProgress });
+  const input = $('pipAiLabInput');
+  if (input) input.value = picked.bite.query;
+  if (autoRun) submitAiLabQuery(picked.bite.query);
 }
 on('pipAiLabSubmit', 'click', () => submitAiLabQuery($('pipAiLabInput')?.value));
 on('pipAiLabInput', 'keydown', (e) => {
@@ -1994,17 +2169,42 @@ on('pipAiLabInput', 'keydown', (e) => {
     submitAiLabQuery(e.target.value);
   }
 });
-document.querySelectorAll('.pip-chip').forEach((chip) => {
-  chip.addEventListener('click', () => {
-    const query = chip.getAttribute('data-query') || '';
-    const input = $('pipAiLabInput');
-    if (input) input.value = query;
-    submitAiLabQuery(query);
-  });
+on('pipAiLabInput', 'input', () => {
+  activeCurriculumBiteId = '';
+});
+on('pipNextBiteBtn', 'click', () => loadDailyBite(true));
+on('pipAiFacetSelect', 'change', () => {
+  activeCurriculumBiteId = '';
 });
 on('pipModelSelector', 'change', () => {
   vscode.postMessage({ type: 'setActiveModel', model: $('pipModelSelector')?.value || '' });
 });
+function setAiLabOpen(open) {
+  const panel = $('pipAiLab');
+  const btn = $('aiBtn');
+  if (!panel || !btn) return;
+  if (open) {
+    panel.removeAttribute('hidden');
+    btn.classList.add('pip-btn-active');
+    btn.setAttribute('aria-expanded', 'true');
+    const input = $('pipAiLabInput');
+    if (input) {
+      const focus = () => { if (typeof input.focus === 'function') input.focus(); };
+      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(focus);
+      else focus();
+    }
+  } else {
+    panel.setAttribute('hidden', '');
+    btn.classList.remove('pip-btn-active');
+    btn.setAttribute('aria-expanded', 'false');
+  }
+}
+function toggleAiLab() {
+  setAiLabOpen($('pipAiLab')?.hasAttribute('hidden'));
+}
+on('aiBtn', 'click', toggleAiLab);
+on('pipAiLabCloseBtn', 'click', () => setAiLabOpen(false));
+vscode.postMessage({ type: 'getAiCurriculum' });
 vscode.postMessage({ type: 'getAvailableModels' });
 function submitDuck() {
   const input = $('duckInput');
@@ -2043,13 +2243,13 @@ let timerSoundEnabled = (vscode.getState?.() || {}).timerSoundEnabled !== false;
 let timerAudio = null;
 let timerPulse = null;
 function refreshTimerSound() {
-  const button = $('timerSoundBtn');
+  const button = $('pipMuteBtn');
   if (!button) return;
-  const label = timerSoundEnabled ? 'Mute timebox completion sound' : 'Enable timebox completion sound';
+  const label = timerSoundEnabled ? 'Mute voice and timebox feedback' : 'Unmute voice and timebox feedback';
   button.title = label;
-  button.setAttribute('aria-label', label);
+  button.setAttribute('aria-label', 'Voice');
   button.setAttribute('aria-pressed', String(!timerSoundEnabled));
-  button.textContent = '♫';
+  button.textContent = timerSoundEnabled ? '\uD83D\uDD0A' : '\uD83D\uDD07';
   button.classList.toggle('soundMuted', !timerSoundEnabled);
 }
 function prepareTimerAudio() {
@@ -2082,37 +2282,60 @@ function finishTimebox() {
     oscillator.start(now); oscillator.stop(now + 0.38);
   } catch { /* The visible completion cue still works when audio is unavailable. */ }
 }
-on('timerSoundBtn', 'click', () => {
+let ambientFocusEnabled = (vscode.getState?.() || {}).ambientFocusEnabled === true;
+function refreshAmbientFocus() {
+  const button = $('pipMusicBtn');
+  if (!button) return;
+  button.setAttribute('aria-pressed', String(ambientFocusEnabled));
+  button.classList.toggle('isActive', ambientFocusEnabled);
+}
+on('pipMuteBtn', 'click', () => {
   timerSoundEnabled = !timerSoundEnabled;
   vscode.setState?.({ ...(vscode.getState?.() || {}), timerSoundEnabled });
   refreshTimerSound();
   if (timerSoundEnabled) prepareTimerAudio();
 });
+on('pipMusicBtn', 'click', () => {
+  ambientFocusEnabled = !ambientFocusEnabled;
+  vscode.setState?.({ ...(vscode.getState?.() || {}), ambientFocusEnabled });
+  refreshAmbientFocus();
+});
 refreshTimerSound();
-on('timerBtn', 'click', () => {
+refreshAmbientFocus();
+on('pipStartBtn', 'click', () => {
+  const start = $('pipStartBtn');
   if (timer) {
-    clearInterval(timer); timer = null;
-    $('timerBtn').textContent = 'Start';
-    $('timerBtn').title = 'Start a new timebox for this session.';
+    clearInterval(timer);
+    timer = null;
+    if (start) {
+      start.textContent = 'Start';
+      start.title = 'Start a new timebox for this session.';
+    }
     return;
   }
   clearTimeout(timerPulse);
   $('timerOut').classList.remove('timeboxComplete');
   prepareTimerAudio();
-  remaining = Math.min(120, Math.max(1, Number($('timerMin').value) || 10)) * 60;
-  $('timerBtn').textContent = 'Stop';
-  $('timerBtn').title = 'Stop the current timebox.';
+  remaining = Math.min(60, Math.max(1, Number($('pipTimeboxInput')?.value) || 10)) * 60;
+  if (start) {
+    start.textContent = 'Stop';
+    start.title = 'Stop the current timebox.';
+  }
   $('timerOut').textContent = `${Math.ceil(remaining / 60)}:00 left`;
   timer = setInterval(() => {
     remaining -= 1;
     if (remaining <= 0) {
-      clearInterval(timer); timer = null;
-      $('timerBtn').textContent = 'Start';
-      $('timerBtn').title = 'Start a new timebox for this session.';
+      clearInterval(timer);
+      timer = null;
+      if (start) {
+        start.textContent = 'Start';
+        start.title = 'Start a new timebox for this session.';
+      }
       finishTimebox();
       return;
     }
-    const minutes = Math.floor(remaining / 60), seconds = String(remaining % 60).padStart(2, '0');
+    const minutes = Math.floor(remaining / 60);
+    const seconds = String(remaining % 60).padStart(2, '0');
     $('timerOut').textContent = `${minutes}:${seconds} left`;
   }, 1000);
 });

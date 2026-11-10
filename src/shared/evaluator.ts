@@ -82,8 +82,20 @@ export function evaluateExplanation(raw: string): Explanation {
 
 export interface AiLabCard {
   concept: string;
+  analogy: string;
+  knowledgeCheck: string;
   wherePip: string;
+  /** Legacy 15-minute experiment section from older prompts. */
   experiment: string;
+}
+
+const CURRICULUM_FACET_IDS = new Set(['history', 'architecture', 'architectures', 'learning', 'inference', 'alignment', 'all']);
+
+/** Webview facet filters must map to a known curriculum track (incl. legacy `architectures`). */
+export function normalizeCurriculumFacet(raw: string): string {
+  const id = raw.trim().toLowerCase();
+  if (id === 'architectures') return 'architecture';
+  return CURRICULUM_FACET_IDS.has(id) ? id : 'all';
 }
 
 /** Remove chain-of-thought wrappers so DeepSeek-R1 style output fits the 3-part card. */
@@ -95,16 +107,26 @@ export function stripModelThinking(raw: string): string {
     .trim();
 }
 
-/** Parse the AI Lab 3-part micro-lesson contract from model markdown. */
+/** Parse the AI Lab micro-card contract (4-part Brilliant/Duolingo or legacy 3-part). */
 export function parseAiLabCard(raw: string): AiLabCard {
   const text = stripModelThinking(raw);
-  const result: AiLabCard = { concept: '', wherePip: '', experiment: '' };
+  const result: AiLabCard = { concept: '', analogy: '', knowledgeCheck: '', wherePip: '', experiment: '' };
   const sections: Array<{ key: keyof AiLabCard; marker: RegExp }> = [
+    { key: 'concept', marker: /^#{1,3}\s*(?:💡\s*)?The Big Idea/i },
+    { key: 'analogy', marker: /^#{1,3}\s*(?:🔍\s*)?Everyday Analogy/i },
+    { key: 'knowledgeCheck', marker: /^#{1,3}\s*(?:🎯\s*)?Quick Knowledge Check/i },
+    { key: 'wherePip', marker: /^#{1,3}\s*(?:🛠️?\s*)?PIP Connection/i },
     { key: 'concept', marker: /^#{1,3}\s*1\.\s*The AI Concept/i },
     { key: 'wherePip', marker: /^#{1,3}\s*2\.\s*How PIP/i },
     { key: 'experiment', marker: /^#{1,3}\s*3\.\s*15-Minute/i },
   ];
-  const bodies: Record<keyof AiLabCard, string[]> = { concept: [], wherePip: [], experiment: [] };
+  const bodies: Record<keyof AiLabCard, string[]> = {
+    concept: [],
+    analogy: [],
+    knowledgeCheck: [],
+    wherePip: [],
+    experiment: [],
+  };
   let current: keyof AiLabCard | null = null;
   let inFence = false;
   for (const line of text.split('\n')) {
@@ -126,7 +148,7 @@ export function parseAiLabCard(raw: string): AiLabCard {
   for (const key of Object.keys(result) as Array<keyof AiLabCard>) {
     result[key] = bodies[key].join('\n').trim();
   }
-  if (!result.concept && !result.wherePip && !result.experiment && text) {
+  if (!result.concept && !result.analogy && !result.knowledgeCheck && !result.wherePip && !result.experiment && text) {
     result.concept = text;
   }
   return result;

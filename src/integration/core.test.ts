@@ -20,7 +20,9 @@ import {
   stripModelThinking,
 } from '../shared/evaluator';
 import { explainPrompt, improveCodebasePrompt, pocIdeasPrompt } from '../agents/prompts';
+import { pickNextDailyBite, CURRICULUM_BITES } from '../learning/ai-curriculum';
 import { aiLabPrompt } from '../learning/prompts';
+import { normalizeCurriculumFacet } from '../shared/evaluator';
 import { assertLocalhost } from '../shared/types';
 import { MockProvider, OllamaProvider } from '../platform/provider';
 import {
@@ -133,7 +135,7 @@ describe('evaluator', () => {
     expect(out.text.endsWith('?')).toBe(true);
     expect((out.text.match(/\?/g) ?? []).length).toBe(1);
   });
-  it('parseAiLabCard extracts all three markdown sections', () => {
+  it('parseAiLabCard extracts legacy three markdown sections', () => {
     const raw = [
       '### 1. The AI Concept (60 Seconds)',
       'Attention distributes weight across tokens.',
@@ -147,6 +149,24 @@ describe('evaluator', () => {
     expect(card.wherePip).toContain('provider.ts');
     expect(card.experiment).toContain('tokensPerSecond');
   });
+  it('parseAiLabCard extracts four-part Brilliant micro-card sections', () => {
+    const raw = [
+      '### 💡 The Big Idea (30s Read)',
+      'Temperature spreads probability mass.',
+      '### 🔍 Everyday Analogy',
+      'Like turning up randomness on a playlist shuffle.',
+      '### 🎯 Quick Knowledge Check',
+      '**Question:** What happens at T=0?\nA) Greedy\nB) Uniform\nC) Noise',
+      '<details><summary>Reveal</summary>**Answer:** A — always pick the top token.</details>',
+      '### 🛠️ PIP Connection or Hack',
+      'Tweak temperature in src/platform/provider.ts.',
+    ].join('\n');
+    const card = parseAiLabCard(raw);
+    expect(card.concept).toContain('Temperature');
+    expect(card.analogy).toContain('playlist');
+    expect(card.knowledgeCheck).toContain('Question');
+    expect(card.wherePip).toContain('provider.ts');
+  });
   it('strips deepseek-style thinking blocks before parsing AI Lab cards', () => {
     const raw = `<think>hidden chain</think>\n### 1. The AI Concept (60 Seconds)\nTokens.\n### 2. How PIP Demonstrates or Violates This\nprovider.ts\n### 3. 15-Minute Code Experiment\nAdd a log line.`;
     expect(stripModelThinking(raw)).not.toContain('hidden chain');
@@ -155,16 +175,34 @@ describe('evaluator', () => {
     expect(card.wherePip).toContain('provider.ts');
     expect(card.experiment).toContain('log line');
   });
-  it('aiLabPrompt includes model, question, and optional selection', () => {
-    const msgs = aiLabPrompt('What is temperature?', 'qwen2.5-coder:14b', {
+  it('ships at least 30 curriculum concepts across five tracks', () => {
+    expect(CURRICULUM_BITES.length).toBeGreaterThanOrEqual(30);
+    const tracks = new Set(CURRICULUM_BITES.map((bite) => bite.facet));
+    expect(tracks.size).toBe(5);
+  });
+  it('picks unread daily bites then cycles the facet track', () => {
+    const first = pickNextDailyBite({ readIds: [], trackIndex: 0 }, 'alignment');
+    expect(first.bite.facet).toBe('alignment');
+    const second = pickNextDailyBite({ readIds: [first.bite.id], trackIndex: first.progress.trackIndex }, 'alignment');
+    expect(second.bite.id).not.toBe(first.bite.id);
+    const pool = CURRICULUM_BITES.filter((bite) => bite.facet === 'alignment').map((bite) => bite.id);
+    const readAll = { readIds: pool, trackIndex: 0 };
+    const again = pickNextDailyBite(readAll, 'alignment');
+    expect(again.cycled).toBe(true);
+    expect(normalizeCurriculumFacet('inference')).toBe('inference');
+    expect(normalizeCurriculumFacet('nope')).toBe('all');
+  });
+  it('aiLabPrompt includes facet, model, question, and optional selection', () => {
+    const msgs = aiLabPrompt('What is temperature?', 'inference', 'qwen2.5-coder:14b', {
       file: 'provider.ts', line: 1, language: 'typescript', selection: 'const x = 1;', surrounding: '',
     });
     expect(msgs).toHaveLength(2);
     expect(msgs.every((message) => message.role === 'system' || message.role === 'user')).toBe(true);
-    expect(msgs[0]?.content).toContain('### 3. 15-Minute Code Experiment');
-    expect(msgs[1]?.content).toContain('Active Model: qwen2.5-coder:14b');
+    expect(msgs[0]?.content).toContain('### 🎯 Quick Knowledge Check');
+    expect(msgs[1]?.content).toContain('Domain Track: inference');
+    expect(msgs[1]?.content).toContain('Model: qwen2.5-coder:14b');
     expect(msgs[1]?.content).toContain('const x = 1;');
-    expect(aiLabPrompt('solo question', 'mock', null)[1]?.content).toContain('No active editor selection.');
+    expect(aiLabPrompt('solo question', 'all', 'mock')[1]?.content).not.toContain('Open editor context');
   });
   it('mock provider explains deterministically', async () => {
     const mock = new MockProvider();

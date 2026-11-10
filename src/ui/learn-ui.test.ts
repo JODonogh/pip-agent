@@ -37,6 +37,8 @@ class Element {
   replaceChildren(...children: Element[]) { this.ownText = ''; this.children = []; this.append(...children); }
   setAttribute(name: string, value: string) { this.attrs[name] = String(value); if (name === 'class') this.className = value; }
   getAttribute(name: string) { return this.attrs[name]; }
+  hasAttribute(name: string) { return Object.prototype.hasOwnProperty.call(this.attrs, name); }
+  removeAttribute(name: string) { delete this.attrs[name]; }
   addEventListener(type: string, fn: (event: any) => void) { (this.listeners[type] ??= []).push(fn); }
   querySelectorAll(selector: string): Element[] { return descendants(this).slice(1).filter((node) => selector.startsWith('.') ? node.classList.contains(selector.slice(1)) : node.tagName === selector); }
   querySelector(selector: string) { return this.querySelectorAll(selector)[0]; }
@@ -302,8 +304,46 @@ describe('focused controls and feedback', () => {
     expect(buttons.filter(([, attrs, body]) => !iconOnly(body!)).some(([, attrs]) => /\btitle=/.test(attrs!))).toBe(false);
     expect(controls.filter(([, tag]) => tag === 'summary').some(([, , attrs]) => /\btitle=/.test(attrs!))).toBe(false);
     expect(LEARN_BODY).not.toContain('id="openBesideBtn"');
-    expect(LEARN_BODY).toContain('Explain the captured code selection again');
+    expect(LEARN_BODY).toContain('id="pipResetBtn"');
+    expect(LEARN_BODY).toContain('pip-toolbar-row');
     expect(LEARN_BODY).toContain('CS · design · testing');
+    const panelCss = readFileSync('media/panel.css', 'utf8');
+    expect(panelCss).toMatch(/\.pip-toolbar-row[\s\S]*?flex-wrap:\s*nowrap/);
+    expect(panelCss).toMatch(/@media \(max-width:\s*320px\)[\s\S]*\.pip-toolbar-row/);
+    expect(panelCss).toContain('pipAiLabReveal');
+  });
+
+  it('toggles the AI Lab panel from AI and collapses with the close control', () => {
+    const ui = webview();
+    const panel = ui.get('pipAiLab');
+    panel.setAttribute('hidden', '');
+    ui.get('aiBtn').listeners.click?.[0]?.({});
+    expect(panel.hasAttribute('hidden')).toBe(false);
+    expect(ui.get('aiBtn').getAttribute('aria-expanded')).toBe('true');
+    ui.get('pipAiLabCloseBtn').listeners.click?.[0]?.({});
+    expect(panel.hasAttribute('hidden')).toBe(true);
+    expect(ui.get('aiBtn').getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('renders collapsible knowledge-check details in AI Lab replies', () => {
+    const ui = webview();
+    ui.message({
+      type: 'aiLabReply',
+      headline: 'Temperature redistributes probability.',
+      parts: [
+        {
+          title: '🎯 Quick Knowledge Check',
+          body: '**Question:** At T=0?\nA) Greedy\nB) Uniform\n<details><summary>Reveal Answer</summary>**Answer:** A — always the top token.</details>',
+        },
+      ],
+    });
+    const out = ui.get('pipAiLabOutput');
+    const details = descendants(out).find((node) => node.tagName === 'details');
+    expect(details).toBeTruthy();
+    expect(details?.className).toBe('pip-ai-lab-kc');
+    const summary = descendants(details!).find((node) => node.tagName === 'summary');
+    expect(summary?.textContent).toContain('Reveal Answer');
+    expect(details!.textContent).toContain('always the top token');
   });
 
   it('describes generated controls without replacing a more specific tooltip', () => {
@@ -346,9 +386,9 @@ describe('focused controls and feedback', () => {
 
   it('shows a finite completion pulse at zero and remembers whether sound is muted', () => {
     const ui = webview({ timerSoundEnabled: false });
-    expect(ui.get('timerSoundBtn').attrs['aria-pressed']).toBe('true');
-    ui.get('timerMin').value = '1';
-    ui.get('timerBtn').listeners.click![0]!({});
+    expect(ui.get('pipMuteBtn').attrs['aria-pressed']).toBe('true');
+    ui.get('pipTimeboxInput').value = '1';
+    ui.get('pipStartBtn').listeners.click![0]!({});
     runInContext('remaining = 1', ui.context);
     ui.intervals[0]!.fn();
     expect(ui.get('timerOut').textContent).toBe('Timebox complete');
@@ -356,9 +396,9 @@ describe('focused controls and feedback', () => {
     const pulse = ui.timeouts.find((item) => item.ms === 2600)!;
     pulse.fn();
     expect(ui.get('timerOut').classList.contains('timeboxComplete')).toBe(false);
-    ui.get('timerSoundBtn').listeners.click![0]!({});
+    ui.get('pipMuteBtn').listeners.click![0]!({});
     expect(ui.state().timerSoundEnabled).toBe(true);
-    expect(ui.get('timerSoundBtn').title).toContain('Mute');
+    expect(ui.get('pipMuteBtn').title).toContain('Mute');
   });
 });
 
@@ -376,7 +416,7 @@ describe('timebox audio cue', () => {
       finishTimebox();
     `, ui.context);
     expect(runInContext('chimes.join(",")', ui.context)).toBe('start,10.38');
-    ui.get('timerSoundBtn').listeners.click![0]!({});
+    ui.get('pipMuteBtn').listeners.click![0]!({});
     runInContext('finishTimebox()', ui.context);
     expect(runInContext('chimes.length', ui.context)).toBe(2);
   });

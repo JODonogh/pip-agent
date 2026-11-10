@@ -88,8 +88,6 @@ npm install
 npm run compile
 npm test
 npm run package:vsix
-code --install-extension dist/agent-pip-0.11.6.vsix --force
-cursor --install-extension dist/agent-pip-0.11.6.vsix --force
 ```
 
 After installation, run **Developer: Reload Window** in the editor. Reloading alone does not rebuild source changes or replace an installed extension. To work directly from the checkout, launch **Run PIP Extension** from the repository's VS Code debug configuration.
@@ -104,3 +102,33 @@ Roots may read the introduction of one Wikipedia page, chosen from a fixed list 
 
 - **Ideate** searches the repository before it challenges your idea (snake_case SQL names are also searched as `PartnerStatus`-style names). It shows what the repository already settles, such as an enum, a union type or a list that fixes the allowed values of something, with clickable file:line links, and drops questions those lists already answer.
 - **Visualise** reads a selected SELECT statement (a Java text block, a string or a .sql file). Data flow draws its parameters, EXISTS subqueries, filters, table, sort and result. The performance view lists the choices found in that query, riskiest first, with a reminder to confirm with EXPLAIN. Neither view is an execution plan or a measurement. Other code keeps the existing views.
+
+## Install Agent PIP into VS Code and Cursor
+
+From the repository root, build a VSIX and install it into both editors (use the version in `package.json`):
+
+```bash
+npm install
+npm run compile
+npm run package:vsix
+```
+
+If `npm run package:vsix` fails because `@vscode/vsce` is blocked on your npm registry, package with the public registry instead:
+
+```bash
+npm run compile
+mkdir -p dist
+npx --yes --registry https://registry.npmjs.org @vscode/vsce package \
+  --allow-missing-repository --skip-license --no-rewrite-relative-links \
+  --out "dist/agent-pip-$(node -p "require('./package.json').version").vsix"
+```
+
+Install the VSIX into **VS Code** and **Cursor** (replace the path if your version differs):
+
+```bash
+VSIX="dist/agent-pip-$(node -p "require('./package.json').version").vsix"
+code --install-extension "$VSIX" --force
+cursor --install-extension "$VSIX" --force
+```
+
+Then run **Developer: Reload Window** in each app. Open the **Agent PIP** activity bar entry, or use **PIP: Show Learn sidebar** from the Command Palette.
