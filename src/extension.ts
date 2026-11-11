@@ -21,6 +21,7 @@ import {
   parsePocIdeas,
   preferredSpeakVoices,
   rootsForSelection,
+  splitReasoningTrace,
 } from './shared/evaluator';
 import {
   conceptTerm,
@@ -54,6 +55,7 @@ import { challengePrompt, dropSettled, parseChallenge } from './ideation/challen
 import { locate, parseEdits, stripEdits } from './solver/edits';
 import { buildIndex, deserializeIndex, hashText, semanticHits, serializeIndex, type SemanticIndex } from './solver/semantic';
 import { embedTexts } from './platform/embeddings';
+import { buildGlassBoxInspection, type GlassBoxInspection } from './learning/glass-box';
 import { buildDayReview, conceptsForLocalDay, localDateKey } from './learning/day-summary';
 import { extractKeywords } from './learning/keywords';
 import { setEvaluatorDiagnostics } from './platform/diagnostics';
@@ -61,13 +63,14 @@ import { InferenceQueue } from './platform/inference-queue';
 import { fetchReference, topicFor, rootsWebPrompt, acceptRoots } from './platform/webroots';
 import { CURRICULUM_BITES, curriculumPayload } from './learning/ai-curriculum';
 import { evaluateDeep, preparedDeep, guardExplanation, glossaryDefinition, evaluateLearningReview, dropEchoChunks, type LearningReview } from './learning/learning-quality';
+import { actorCriticTelemetry, ideaDebate } from './ideation/actor-critic';
 import { verifyIdeas, usefulExperiment, experimentScaffolds, metaphorScaffold, type IdeaVerification } from './ideation/ideation';
 import { evaluateSolver, solverInput, solverKeywords, restoredSolverContext, type SolverInput, type EvaluatedSolverReply } from './solver/solver';
 import { extractFileReferences, selectFileMatches, type FileReference } from './solver/solver-files';
 import { solverCheckPrompt, type SolverMode } from './solver/prompts';
 import { loadComparisonSources, readConfinedTestSource } from './solver/comparison';
 import { junitReadOutline } from './diagrams/junit-outline';
-import { visualise, readCoverage, type CoverageReport, type Visualisations } from './diagrams/visualise';
+import { visualise, readCoverage, type CoverageReport, type LlmGlassInput, type Visualisations } from './diagrams/visualise';
 import {
   convergePrompt,
   deepPrompt,
@@ -161,6 +164,9 @@ interface LearningSession {
   controller: AbortController;
   deep: Map<string, Promise<void>>;
   prior: string;
+  focus?: string;
+  style: ExplainStyle;
+  explainMessages?: ChatMessage[];
 }
 
 const TOKEN_CAPS: Record<string, number> = {
@@ -173,7 +179,9 @@ const TOKEN_CAPS: Record<string, number> = {
   popup: 110,
   'learning-review': 320,
   chat: 420,
+  'chat-debug': 900,
   'chat-vibe': 800,
+  'solver-trace': 520,
   challenge: 180,
   solver: 380,
   deep: 340,
@@ -227,6 +235,12 @@ export function activate(context: vscode.ExtensionContext): void {
   const deepCache = new Map<string, Explanation>();
   let learningSequence = 0;
   let importedCoverage: CoverageReport | undefined;
+  let lastGlassRun: LlmGlassInput['lastRun'];
+  const glassForVisualise = (): LlmGlassInput => ({
+    stats: store.stats(),
+    lastRun: lastGlassRun,
+    temperature: vscode.workspace.getConfiguration().get<number>('pip.probeTemperature', 0.2),
+  });
   const graphContexts = new Map<Transport, { ctx: CodeContext; diagrams: Visualisations }>();
   context.subscriptions.push({ dispose: () => learningSessions.forEach((session) => session.controller.abort()) });
   let speechProcess: ChildProcess | null = null;
@@ -335,7 +349,7 @@ export function activate(context: vscode.ExtensionContext): void {
     worker: string,
     modelSetting: 'pip.model' | 'pip.fastModel' | 'pip.creativeModel' | 'pip.reasoningModel',
     messages: ChatMessage[],
-    options: { priority?: 'foreground' | 'background'; signal?: AbortSignal; key?: string; onStart?: () => void; contextSize?: number; model?: string } = {},
+    options: { priority?: 'foreground' | 'background'; signal?: AbortSignal; key?: string; onStart?: () => void; contextSize?: number; model?: string; temperature?: number } = {},
   ): Promise<ProviderResult & { latencyMs: number }> => inference.run(async (signal) => {
     options.onStart?.();
     const config = vscode.workspace.getConfiguration();
@@ -346,7 +360,10 @@ export function activate(context: vscode.ExtensionContext): void {
     let result: ProviderResult | undefined;
     for (const candidate of new Set([model, config.get<string>('pip.model', 'qwen2.5-coder:3b')])) {
       try {
-        result = await provider.chat(messages, candidate, TOKEN_CAPS[worker] ?? 256, signal, options.contextSize);
+        result = await provider.chat(messages, candidate, TOKEN_CAPS[worker] ?? 256, signal, {
+          contextSize: options.contextSize,
+          temperature: options.temperature,
+        });
         break;
       } catch (error) {
         if (signal.aborted) throw error;
@@ -357,6 +374,16 @@ export function activate(context: vscode.ExtensionContext): void {
     const latencyMs = Date.now() - started;
     await store.addStat({ worker, model: result.model, latencyMs, estTokens: estimateTokens(result.text),
       costUsd: 0, fromMock: result.fromMock, at: Date.now() });
+    if (!result.fromMock && result.telemetry) {
+      lastGlassRun = {
+        worker,
+        model: result.model,
+        promptEvalCount: result.telemetry.promptEvalCount,
+        promptEvalDurationMs: result.telemetry.promptEvalDurationMs,
+        evalCount: result.telemetry.evalCount,
+        evalDurationMs: result.telemetry.evalDurationMs,
+      };
+    }
     return { ...result, latencyMs };
   }, options);
 
@@ -434,10 +461,24 @@ export function activate(context: vscode.ExtensionContext): void {
     return id;
   };
 
-  const verifyCandidates = async (ctx: CodeContext, claims: string[], offline: boolean): Promise<IdeaVerification[]> => {
-    if (!claims.length || offline) return verifyIdeas('', ctx, claims.length, true);
-    const result = await runWorker('idea-verifier', 'pip.model', verifierPrompt(ctx, claims));
-    return verifyIdeas(result.text, ctx, claims.length, result.fromMock, claims);
+  const verifyCandidates = async (
+    ctx: CodeContext,
+    claims: string[],
+    offline: boolean,
+  ): Promise<{ verdicts: IdeaVerification[]; criticModel: string }> => {
+    if (!claims.length || offline) {
+      return { verdicts: verifyIdeas('', ctx, claims.length, true), criticModel: '' };
+    }
+    const config = vscode.workspace.getConfiguration();
+    const criticOverride = config.get<string>('pip.criticModel', '').trim()
+      || config.get<string>('pip.reasoningModel', '').trim();
+    const result = await runWorker('idea-verifier', 'pip.reasoningModel', verifierPrompt(ctx, claims), {
+      model: criticOverride || undefined,
+    });
+    return {
+      verdicts: verifyIdeas(result.text, ctx, claims.length, result.fromMock, claims),
+      criticModel: result.model,
+    };
   };
 
   const speculativeIdea = (ctx: CodeContext, claim: string): string =>
@@ -559,12 +600,20 @@ export function activate(context: vscode.ExtensionContext): void {
     const style = currentStyle;
     const brief = learningBrief(store.concepts(), ctx.selection, ctx.file);
     const prior = learningPromptBlock(brief);
-    const session: LearningSession = { id: String(++learningSequence), ctx, prior, controller: new AbortController(), deep: new Map() };
+    const session: LearningSession = {
+      id: String(++learningSequence),
+      ctx,
+      prior,
+      controller: new AbortController(),
+      deep: new Map(),
+      focus,
+      style,
+    };
     learningSessions.set(transport, session);
     transport.post({ type: 'learningStarted', sessionId: session.id });
     // Explanation prompts stay small; diagrams inspect the selected source rather than the prompt prefix.
     const diagramCtx = { ...codeContext, surrounding: codeContext.surrounding.slice(0, 3500) };
-    const diagrams = diagramCtx.selection.length <= 100_000 ? visualise(diagramCtx, importedCoverage) : undefined;
+    const diagrams = diagramCtx.selection.length <= 100_000 ? visualise(diagramCtx, importedCoverage, glassForVisualise()) : undefined;
     if (diagrams) {
       graphContexts.set(transport, { ctx: diagramCtx, diagrams });
       transport.post({
@@ -576,6 +625,8 @@ export function activate(context: vscode.ExtensionContext): void {
       });
     } else { graphContexts.delete(transport); transport.post({ type: 'visualiseError', text: 'Selection is too large to diagram. Select at most 100,000 characters.' }); }
     const cacheKey = JSON.stringify([ctx, focus, style, prior]);
+    const explainMessages = explainPrompt(ctx, focus, style, prior);
+    session.explainMessages = explainMessages;
     const cached = explainCache.get(cacheKey);
     let result: (ProviderResult & { latencyMs: number }) | null = null;
     let explanation = cached;
@@ -587,7 +638,7 @@ export function activate(context: vscode.ExtensionContext): void {
         try {
           const streamed = await inference.run((signal) => new OllamaProvider(
             config.get<string>('pip.ollamaUrl', 'http://127.0.0.1:11434'),
-          ).chatStream(explainPrompt(ctx, focus, style, prior), config.get<string>('pip.model', 'qwen2.5-coder:3b'), ctx.selection.length > 700 ? 600 : 320, (text) => {
+          ).chatStream(explainMessages, config.get<string>('pip.model', 'qwen2.5-coder:3b'), ctx.selection.length > 700 ? 600 : 320, (text) => {
             if (isCurrent(transport, session) && Date.now() - lastSent > 250) {
               lastSent = Date.now();
               transport.post({ type: 'streamPartial', sessionId: session.id, text });
@@ -599,7 +650,7 @@ export function activate(context: vscode.ExtensionContext): void {
         }
       }
       result ??= await runWorker(depth > 0 ? 'explainer-nested' : 'explainer', depth > 0 ? 'pip.fastModel' : 'pip.model',
-        explainPrompt(ctx, focus, style, prior), { signal: session.controller.signal });
+        explainMessages, { signal: session.controller.signal });
       if (!isCurrent(transport, session)) return;
       const parsed = guardExplanation(ctx, evaluateExplanation(result.text));
       explanation = { ...parsed, bottomLine: referenceBottomLine(parsed.bottomLine, brief) };
@@ -610,9 +661,22 @@ export function activate(context: vscode.ExtensionContext): void {
     lastBottomLine = explanation.bottomLine;
     lastTerm = conceptTerm(ctx.selection, focus);
     const testOutline = junitReadOutline(diagramCtx);
-    transport.post({ type: 'explanation', sessionId: session.id, explanation, focus: focus ?? null, term: lastTerm, depth,
-      hint: null, learning: brief, keywords: explanationKeywords(explanation), diagrams,
-      verify: deriveEngagement(ctx, diagrams ?? null), testOutline });
+    const glassBox = result ? buildGlassBoxInspection(explainMessages, ctx, explanation, result) : undefined;
+    transport.post({
+      type: 'explanation',
+      sessionId: session.id,
+      explanation,
+      focus: focus ?? null,
+      term: lastTerm,
+      depth,
+      hint: null,
+      learning: brief,
+      keywords: explanationKeywords(explanation),
+      diagrams,
+      verify: deriveEngagement(ctx, diagrams ?? null),
+      testOutline,
+      glassBox,
+    });
     // The overview is visible before any review or collapsed-section generation starts.
     if (depth === 0) prepareLearning(transport, session, explanation, cacheKey, result?.fromMock ?? false);
     transport.post(ledgerMessage());
@@ -794,8 +858,19 @@ export function activate(context: vscode.ExtensionContext): void {
               fromMock: result.fromMock,
               at: Date.now(),
             });
+            if (!result.fromMock && result.telemetry) {
+              lastGlassRun = {
+                worker: 'probe',
+                model: result.model,
+                promptEvalCount: result.telemetry.promptEvalCount,
+                promptEvalDurationMs: result.telemetry.promptEvalDurationMs,
+                evalCount: result.telemetry.evalCount,
+                evalDurationMs: result.telemetry.evalDurationMs,
+              };
+            }
             transport.post({
               type: 'probeResult',
+              probeKey,
               formatted: result.text,
               raw: result.rawText ?? result.text,
               telemetry: result.telemetry,
@@ -952,14 +1027,28 @@ export function activate(context: vscode.ExtensionContext): void {
             input.sources.push(...comparison.sources.map((file) => `Workspace test excerpts: ${file.path} (${file.text.length} characters)`));
           }
           const frame = firstAppFrame(`${input.problem}\n${input.errorText}`);
+          const solverTrace = message['solverTrace'] === true;
+          const solverTemperature = solverTrace
+            ? Math.min(1, Math.max(0, Number(message['solverTemperature'] ?? 0.1)))
+            : undefined;
+          const solverWorker = solverTrace ? 'solver-trace' : 'solver';
+          const solverRunOpts: { contextSize?: number; temperature?: number; model?: string } = {
+            contextSize: input.comparedSources?.length === 2 ? 8192 : 4096,
+          };
+          if (solverTrace) {
+            solverRunOpts.temperature = solverTemperature;
+            const reasoning = vscode.workspace.getConfiguration().get<string>('pip.reasoningModel', '').trim();
+            if (reasoning) solverRunOpts.model = reasoning;
+          }
           const result = await runWorker(
-            'solver',
-            'pip.fastModel',
+            solverWorker,
+            solverTrace ? 'pip.reasoningModel' : 'pip.fastModel',
             solverPrompt(input.ctx, input.problem, input.errorText, solverTried, solverMode, input.comparedSources),
-            { contextSize: input.comparedSources?.length === 2 ? 8192 : 4096 },
+            solverRunOpts,
           );
           if (generation !== solverGeneration) break;
-          const reply = evaluateSolver(result.text, input, solverTried, solverMode);
+          const solverSplit = splitReasoningTrace(result.rawText ?? result.text);
+          const reply = evaluateSolver(solverSplit.answer || result.text, input, solverTried, solverMode);
           lastSolverCause = reply.cause;
           lastSolverInput = input;
           lastSolverReply = reply;
@@ -970,8 +1059,21 @@ export function activate(context: vscode.ExtensionContext): void {
             input.problem.includes(quote) ? 'problem text' : input.ctx?.selection.includes(quote) ?
               `editor excerpt: ${input.ctx.file}:${input.ctx.line}` : input.ctx?.surrounding.includes(quote) ? 'nearby editor code' :
               `workspace file: ${input.comparedSources?.find((file) => file.text.includes(quote))?.path ?? 'unknown'}`);
-          transport.post({ type: 'solverReply', mode: solverMode, reply, frame, sources: input.sources, files,
-            evidenceSources, keywords: solverKeywords(replyText), fromMock: result.fromMock });
+          transport.post({
+            type: 'solverReply',
+            mode: solverMode,
+            reply,
+            frame,
+            sources: input.sources,
+            files,
+            evidenceSources,
+            keywords: solverKeywords(replyText),
+            fromMock: result.fromMock,
+            reasoningTrace: !result.fromMock && solverSplit.thinking ? solverSplit.thinking : undefined,
+            debugTemperature: solverTrace ? solverTemperature : undefined,
+            traceModel: solverTrace ? result.model : undefined,
+            traceTokensPerSecond: solverTrace ? result.tokensPerSecond : undefined,
+          });
           transport.post(statLine(result, 'solver'));
           break;
         }
@@ -1021,6 +1123,29 @@ export function activate(context: vscode.ExtensionContext): void {
           if (['analogy', 'foundations', 'roots', 'Trade-off: Performance'].includes(kind)) await prepareDeep(transport, session, kind, true);
           break;
         }
+        case 'glassBoxCompare': {
+          const session = learningSessions.get(transport);
+          if (!session || (message['sessionId'] && message['sessionId'] !== session.id)) break;
+          const model = String(message['model'] ?? '').trim();
+          if (!model) break;
+          const messages = session.explainMessages ?? explainPrompt(session.ctx, session.focus, session.style, session.prior);
+          const result = await runWorker('explainer', 'pip.model', messages, { model, signal: session.controller.signal });
+          if (!isCurrent(transport, session)) break;
+          const parsed = guardExplanation(session.ctx, evaluateExplanation(result.text));
+          const brief = learningBrief(store.concepts(), session.ctx.selection, session.ctx.file);
+          const explanation = { ...parsed, bottomLine: referenceBottomLine(parsed.bottomLine, brief) };
+          const glassBox = buildGlassBoxInspection(messages, session.ctx, explanation, result);
+          transport.post({
+            type: 'glassBoxUpdate',
+            sessionId: session.id,
+            model,
+            glassBox,
+            explanation,
+            keywords: explanationKeywords(explanation),
+          });
+          transport.post(statLine(result, `explainer:${model}`));
+          break;
+        }
         case 'diverge': {
           const ctx = contextForIdeas();
           if (!ctx) {
@@ -1049,11 +1174,24 @@ export function activate(context: vscode.ExtensionContext): void {
             groundedInCode(`${idea.title} ${idea.why} ${idea.change}`, anchors),
           ).slice(0, 3);
           const claims = ideas.map((idea) => JSON.stringify(idea));
-          const verdicts = await verifyCandidates(ctx, claims, result.fromMock);
-          transport.post({ type: 'improvements', ideas: ideas.map((idea, index) => ({ ...idea,
-            id: registerIdea(ctx, claims[index]!, verdicts[index]!), verification: verdicts[index] })),
-            lens, file: `${ctx.file}:${ctx.line}`, note: result.fromMock ? 'Ollama is unavailable; no improvements were assessed.' :
-              ideas.length ? '' : 'No specific improvement was supported by this excerpt. Select more relevant code or try another lens.' });
+          const { verdicts, criticModel } = await verifyCandidates(ctx, claims, result.fromMock);
+          const actorCritic = ideas.length
+            ? actorCriticTelemetry(result.model, criticModel || result.model, verdicts)
+            : undefined;
+          transport.post({
+            type: 'improvements',
+            ideas: ideas.map((idea, index) => ({
+              ...idea,
+              id: registerIdea(ctx, claims[index]!, verdicts[index]!),
+              verification: verdicts[index],
+              debate: ideaDebate(verdicts[index]!),
+            })),
+            actorCritic,
+            lens,
+            file: `${ctx.file}:${ctx.line}`,
+            note: result.fromMock ? 'Ollama is unavailable; no improvements were assessed.' :
+              ideas.length ? '' : 'No specific improvement was supported by this excerpt. Select more relevant code or try another lens.',
+          });
           transport.post(statLine(result, `improve:${lens}`));
           break;
         }
@@ -1071,11 +1209,23 @@ export function activate(context: vscode.ExtensionContext): void {
           ).slice(0, 3);
           if (!result.fromMock && !pocs.length) pocs = experimentScaffolds(ctx, seed);
           const claims = pocs.map((poc) => JSON.stringify(poc));
-          const verdicts = await verifyCandidates(ctx, claims, result.fromMock);
-          transport.post({ type: 'pocIdeasResult', pocs: pocs.map((poc, index) => ({ ...poc,
-            id: registerIdea(ctx, claims[index]!, verdicts[index]!), verification: verdicts[index] })),
-            file: `${ctx.file}:${ctx.line}`, note: result.fromMock ? 'Ollama is unavailable; no experiments were proposed.' :
-              pocs.length ? '' : 'No useful experiment was grounded in this excerpt. Describe the uncertainty you want to test or select more context.' });
+          const { verdicts, criticModel } = await verifyCandidates(ctx, claims, result.fromMock);
+          const actorCritic = pocs.length
+            ? actorCriticTelemetry(result.model, criticModel || result.model, verdicts)
+            : undefined;
+          transport.post({
+            type: 'pocIdeasResult',
+            pocs: pocs.map((poc, index) => ({
+              ...poc,
+              id: registerIdea(ctx, claims[index]!, verdicts[index]!),
+              verification: verdicts[index],
+              debate: ideaDebate(verdicts[index]!),
+            })),
+            actorCritic,
+            file: `${ctx.file}:${ctx.line}`,
+            note: result.fromMock ? 'Ollama is unavailable; no experiments were proposed.' :
+              pocs.length ? '' : 'No useful experiment was grounded in this excerpt. Describe the uncertainty you want to test or select more context.',
+          });
           transport.post(statLine(result, 'experiment-ideator'));
           break;
         }
@@ -1155,7 +1305,7 @@ export function activate(context: vscode.ExtensionContext): void {
           const ctx = visualContext();
           if (!ctx) { transport.post({ type: 'visualiseError', text: 'Open or select code in the editor first.' }); break; }
           if (ctx.selection.length > 100_000) { transport.post({ type: 'visualiseError', text: 'Selection is too large to diagram. Select at most 100,000 characters.' }); break; }
-          const diagrams = visualise(ctx, importedCoverage);
+          const diagrams = visualise(ctx, importedCoverage, glassForVisualise());
           graphContexts.set(transport, { ctx, diagrams });
           transport.post({
             type: 'diagrams',
@@ -1176,7 +1326,7 @@ export function activate(context: vscode.ExtensionContext): void {
           if (stat.size > 5 * 1024 * 1024) throw new Error('Report too large');
           const report = new TextDecoder().decode(await vscode.workspace.fs.readFile(selected[0]));
           importedCoverage = readCoverage(report, ctx.file);
-          const diagrams = visualise(ctx, importedCoverage);
+          const diagrams = visualise(ctx, importedCoverage, glassForVisualise());
           graphContexts.set(transport, { ctx, diagrams });
           transport.post({
             type: 'diagrams',
@@ -1197,7 +1347,7 @@ export function activate(context: vscode.ExtensionContext): void {
             const panel = LearnPanel.show(context.extensionUri, captured);
             panel.onMessage((m) => handleLearnMessage(panel, m));
             panel.post({ type: 'context', context: captured });
-            const diagrams = visualise(captured, importedCoverage);
+            const diagrams = visualise(captured, importedCoverage, glassForVisualise());
             graphContexts.set(panel, { ctx: captured, diagrams });
             panel.post({ type: 'diagrams', diagrams, openDiagram: true, testOutline: junitReadOutline(captured) });
           }
@@ -1400,12 +1550,22 @@ export function activate(context: vscode.ExtensionContext): void {
               try { hits = mergeHits(hits, await semanticHits(semantic, `${question} ${code.slice(0, 300)}`, embedder(), 6), 10); } catch { /* keyword hits still stand */ }
             }
           }
-          const chatWorker = mode === 'vibe' ? 'chat-vibe' : 'chat';
+          const debugTemperature = mode === 'debug'
+            ? Math.min(1, Math.max(0, Number(message['debugTemperature'] ?? 0.1)))
+            : undefined;
+          const chatWorker = mode === 'vibe' ? 'chat-vibe' : mode === 'debug' ? 'chat-debug' : 'chat';
+          const chatRunOpts: { temperature?: number; model?: string } = {};
+          if (mode === 'debug') {
+            chatRunOpts.temperature = debugTemperature;
+            const reasoning = vscode.workspace.getConfiguration().get<string>('pip.reasoningModel', '').trim();
+            if (reasoning) chatRunOpts.model = reasoning;
+          }
           const repoIndex = { paths: files.map((file) => file.path), has: (term: string) => files.some((file) => file.text.includes(term)) };
           let result = await runWorker(
             chatWorker,
             'pip.reasoningModel',
             chatPrompt(mode, question, history, code, formatHits(hits), terms, formatFacts(facts), { conceptualAnswer }),
+            chatRunOpts,
           );
           const more = conceptualAnswer ? null : result.fromMock ? null : followUpSearch(result.text);
           if (more && !terms.includes(more)) {
@@ -1417,8 +1577,11 @@ export function activate(context: vscode.ExtensionContext): void {
               chatWorker,
               'pip.reasoningModel',
               chatPrompt(mode, question, history, code, formatHits(hits), terms, formatFacts(facts), { conceptualAnswer: false }),
+              chatRunOpts,
             );
           }
+          const reasoningSplit = splitReasoningTrace(result.rawText ?? result.text);
+          const coachText = reasoningSplit.answer || result.text;
           lastChatHits = hits;
           // Edits are checked against the real file text; only an edit to a searched file that matches exactly once can be applied.
           const proposals = mode === 'vibe' && !result.fromMock ? parseEdits(result.text).map((edit, index) => {
@@ -1444,9 +1607,13 @@ export function activate(context: vscode.ExtensionContext): void {
             text: result.fromMock
               ? 'Ollama is unavailable, so I could not answer. Check your local model and try again.'
               : mode === 'vibe'
-                ? stripEdits(cleanReply(result.text))
-                : formatCoach(mode, cleanReply(result.text), repoIndex, engagement, { symbolCaveat: !conceptualAnswer }),
+                ? stripEdits(cleanReply(coachText))
+                : formatCoach(mode, cleanReply(coachText), repoIndex, engagement, { symbolCaveat: !conceptualAnswer }),
             sources: hits.slice(0, 6).map((hit) => ({ file: hit.file, line: hit.line })),
+            reasoningTrace: !result.fromMock && reasoningSplit.thinking ? reasoningSplit.thinking : undefined,
+            debugTemperature: mode === 'debug' ? debugTemperature : undefined,
+            traceModel: mode === 'debug' ? result.model : undefined,
+            traceTokensPerSecond: mode === 'debug' ? result.tokensPerSecond : undefined,
           });
           transport.post(statLine(result, 'chat'));
           break;
@@ -1650,7 +1817,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (message['type'] === 'setLearningLayer') {
         const concept = store.concepts().find((c) => c.id === String(message['id'] ?? ''));
         const layer = message['layer'];
-        if (concept && (layer === 'data' || layer === 'frontend' || layer === 'backend')) {
+        if (concept && (layer === 'data' || layer === 'frontend' || layer === 'backend' || layer === 'ai')) {
           await store.upsertConcept({ ...concept, learningLayer: layer });
           sidebar.post(ledgerMessage());
         }

@@ -62,7 +62,7 @@ export interface Explanation {
   experimentalDraft?: boolean;
 }
 
-export type LearningLayer = 'data' | 'frontend' | 'backend';
+export type LearningLayer = 'data' | 'frontend' | 'backend' | 'ai';
 
 export interface Concept {
   /** Optional engineer-selected practice layer; legacy cards infer it from the source file. */

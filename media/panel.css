@@ -1502,6 +1502,17 @@ button.word:focus-visible { outline: 2px solid var(--vscode-focusBorder, #63b7c5
 .briefIn30s { margin: 8px 0; padding: 8px; border-left: 3px solid var(--vscode-textLink-foreground, #4da3ff); }
 .briefIn30s p { margin: 0 0 6px; }
 .engagementLine { font-weight: 600; margin: 0 0 8px; }
+.glassTelemetry { font-size: 12px; margin: 0 0 10px; }
+.glassCompareRow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.glassCompareBtn { font-size: 12px; padding: 4px 10px; }
+.glassCompareBtn.glassCompareActive { font-weight: 600; }
+.glassPromptPart h4 { margin: 10px 0 6px; font-size: 12px; }
+.glassPromptBlock { white-space: pre-wrap; font-size: 11px; max-height: 220px; overflow: auto; padding: 8px; border-radius: 6px; background: var(--cnvs-sys-color-bg-alt, #f4f4f4); border: 1px solid var(--cnvs-sys-color-border-container, #ddd); }
+mark.glassFewShot { background: #e8f4e8; color: inherit; padding: 0 2px; }
+.glassUngrounded { color: var(--cnvs-sys-color-text-critical, #8a2a2a); font-size: 12px; }
+.glassAnchors { font-size: 12px; }
+.glassCompareTable { width: 100%; font-size: 11px; border-collapse: collapse; margin-top: 12px; }
+.glassCompareTable th, .glassCompareTable td { border: 1px solid var(--cnvs-sys-color-border-container, #ddd); padding: 4px 6px; text-align: left; }
 #testMapBlock.cnvs-card-inset { margin-top: 8px; padding: 0; border: none; background: transparent; }
 #testMapBlock[hidden] { display: none !important; }
 .testMapNote { margin: 0 0 8px; }
@@ -1536,6 +1547,55 @@ button.word:focus-visible { outline: 2px solid var(--vscode-focusBorder, #63b7c5
 .chatSendArrow:disabled { opacity: .5; }
 .chatModeLabel { font-size: 12px; color: var(--vscode-descriptionForeground); }
 .chatModeLabel.isActive { color: inherit; font-weight: 700; }
+.chatModeChip {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--vscode-button-border, transparent);
+  background: var(--vscode-button-secondaryBackground, transparent);
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+}
+.chatModeChip.isActive { font-weight: 700; color: inherit; border-color: var(--vscode-focusBorder); }
+.chatDebugRow { display: flex; align-items: center; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
+.chatDebugControls, .solverTraceControls { display: inline-flex; align-items: center; gap: 6px; }
+.chatTempBtn {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--vscode-widget-border, transparent);
+  background: transparent;
+  cursor: pointer;
+}
+.chatTempBtn.isActive { font-weight: 700; border-color: var(--vscode-focusBorder); }
+.reasoningTrace { margin: 0 0 8px; font-size: 12px; }
+.reasoningTraceBody {
+  max-height: 220px;
+  overflow: auto;
+  white-space: pre-wrap;
+  font-size: 11px;
+  opacity: 0.9;
+  margin: 6px 0 0;
+  padding: 8px;
+  border-radius: 6px;
+  background: var(--vscode-textCodeBlock-background);
+}
+.solverTraceRow { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 6px 0; font-size: 12px; }
+.solverTraceToggle { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.actorCriticBanner {
+  font-size: 12px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--vscode-textBlockQuote-background, rgba(127, 127, 127, 0.12));
+  border-left: 3px solid var(--vscode-focusBorder, #3794ff);
+}
+.actorCriticDivergence {
+  font-size: 12px;
+  margin: 6px 0;
+  color: var(--vscode-inputValidation-warningForeground, inherit);
+}
+.actorCriticAlign { font-size: 12px; margin: 6px 0; }
 .pipSwitch { position: relative; width: 36px; height: 20px; padding: 0; border-radius: 10px; border: 1px solid var(--vscode-editorWidget-border, #666); background: #444; cursor: pointer; }
 .pipSwitch[aria-checked="true"] { background: #3fb950; }
 .pipSwitchThumb { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .15s; }

@@ -41,7 +41,7 @@
         "pip.model": {
           "type": "string",
           "default": "qwen2.5-coder:3b",
-          "description": "Model for explanations (local Ollama). Benchmarked: ~1.6s warm with clean chunk format. Set to qwen2.5-coder:7b or mistral:latest for maximum depth."
+          "description": "Primary local model. Also the Actor (generator) for Ideate improvements and POC proposals — e.g. qwen2.5-coder:14b. Benchmarked warm ~1.6s on 3b with clean chunk format."
         },
         "pip.creativeModel": {
           "type": "string",
@@ -66,7 +66,12 @@
         "pip.reasoningModel": {
           "type": "string",
           "default": "qwen2.5-coder:7b",
-          "description": "Model for the Solve chat and idea challenges, where answer quality matters more than speed. Falls back to pip.model if it is not installed. Explanations and popups stay on the fast model."
+          "description": "Reasoning model for Solve chat (debug trace) and the default Critic for Ideate verification when pip.criticModel is empty — e.g. deepseek-r1:8b. Falls back to pip.model if not installed."
+        },
+        "pip.criticModel": {
+          "type": "string",
+          "default": "",
+          "description": "Optional independent Critic for Ideate (generator–verifier loop). Empty uses pip.reasoningModel. Set to a different model than pip.model for cross-model debate (e.g. phi4:14b vs qwen2.5-coder:14b)."
         },
         "pip.fastModel": {
           "type": "string",

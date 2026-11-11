@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Concept } from '../shared/types';
 import { conceptTerm, recordLearning } from './memory';
-import { clozeFor, reviewStatus, reviewView, layerOf, drillFocus } from './review';
+import { clozeFor, reviewStatus, reviewView, layerOf, drillFocus, LEARNING_LAYERS } from './review';
 
 const concept = (over: Partial<Concept> = {}): Concept => ({
   id: 'getAll|FrontController.java',
@@ -86,6 +86,13 @@ describe('practice layers', () => {
     expect(layerOf(concept({ learningLayer: 'data' }))).toBe('data');
     expect(drillFocus(concept({ learningLayer: 'data' }))).toContain('transactions');
     expect(recordLearning(concept({ learningLayer: 'data' }), { term: 'getAll', bottomLine: 'Updated lesson', file: 'FrontController.java', line: 18, now: 2 }).learningLayer).toBe('data');
+    expect(layerOf(concept({
+      term: 'T=0.1 probe',
+      bottomLine: 'At temperature 0.1 the reasoning trace showed less self-correction than at 0.7.',
+      file: 'src/platform/provider.ts',
+    }))).toBe('ai');
+    expect(drillFocus(concept({ learningLayer: 'ai' }))).toContain('tokenization');
+    expect(LEARNING_LAYERS.ai.filterLabel).toBe('AI & Inference');
   });
 
   it('builds Explain in 30s copy from the kept takeaway without calling a model', () => {

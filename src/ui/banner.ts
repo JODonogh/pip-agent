@@ -51,12 +51,14 @@ const DIAGRAM_HELP: Record<string, string> = {
   cartesian: 'Inspect a code-based work estimate and its assumptions.',
   context: 'See the selected code in the context of its file.',
   security: 'Inspect security-relevant observations and the checks still needed.',
+  llmPhysics: 'Glass box: attention scaling, KV growth, and local Ollama timings for this selection.',
 };
 const SECTION_HELP: Record<string, string> = {
   'With an analogy': 'Map this code to a familiar idea and see where the analogy stops helping.',
   Foundations: 'Learn the computer science, design, and testing principles this code illustrates, with a concrete example.',
   'Roots & history': 'Explore the origin of an idea used in this selection.',
   'Performance': 'Compare the performance costs and benefits of this implementation.',
+  'Behind the Curtain': 'Inspect the explainer prompt, token budget, Ollama telemetry, and grounding hints for this answer.',
   'Verify it yourself': 'Choose a test, local API request, or database check to challenge your understanding.',
   Diagrams: 'Expand diagrams that are useful for the selected code.',
   'Ask about this diagram': 'Ask a follow-up about the current view and its source evidence.',
@@ -193,6 +195,10 @@ export const LEARN_BODY = withControlHelp(`
           <summary><span>Performance</span><span class="summaryMeta">cost &amp; speed</span></summary>
           <div class="deepBody muted">Prepared after you select code\u2026</div>
         </details>
+        <details class="deepLazy" data-kind="glass-box" id="glassBoxDrawer">
+          <summary><span>Behind the Curtain</span><span class="summaryMeta">telemetry &amp; prompt</span></summary>
+          <div class="deepBody muted">Model telemetry and prompt anatomy appear after the overview.</div>
+        </details>
       </div>
     </section>
 
@@ -235,6 +241,7 @@ export const LEARN_BODY = withControlHelp(`
             <button class="diagramTypeBtn" data-type="cartesian">Code estimate</button>
             <button class="diagramTypeBtn" data-type="context">File context</button>
             <button class="diagramTypeBtn" data-type="security">Security</button>
+            <button class="diagramTypeBtn" data-type="llmPhysics">LLM physics</button>
             </span>
             <span class="zoomGroup">
               <button id="zoomOutBtn" class="iconBtn" title="Zoom out">\u2212</button>
@@ -248,6 +255,7 @@ export const LEARN_BODY = withControlHelp(`
             <label><input type="checkbox" class="layerToggle" data-layer="imports"> imports</label>
             <label><input type="checkbox" class="layerToggle" data-layer="params" checked> params</label>
             <label><input type="checkbox" class="layerToggle" data-layer="hooks" checked> hooks/state</label>
+            <label><input type="checkbox" class="layerToggle" data-layer="tokens" checked> tokens</label>
           </div>
           <p id="diagramSelection" class="muted" role="status">No diagram yet. Select code, then press Visualise selection.</p>
           <div id="diagram" class="diagramStage"><span class="muted">Select code to render an excerpt sketch. Click any node for a one-line popup.</span></div>
@@ -346,6 +354,14 @@ export const LEARN_BODY = withControlHelp(`
             <span id="chatModeVibe" class="chatModeLabel">Answer</span>
           </div>
         </div>
+        <div class="chatDebugRow">
+          <button id="chatModeDebugBtn" type="button" class="chatModeChip">Debug trace</button>
+          <span id="chatDebugControls" class="chatDebugControls hidden" aria-hidden="true">
+            <span class="muted">Temperature</span>
+            <button type="button" class="chatTempBtn" id="chatTempLow" data-temp="0.1">0.1</button>
+            <button type="button" class="chatTempBtn" id="chatTempHigh" data-temp="0.7">0.7</button>
+          </span>
+        </div>
       </div>
       <div class="row chatFlow"><span class="muted">Explore further:</span><button id="chatOpenLearnBtn" type="button">Learn</button><button id="chatVisualiseBtn" type="button" title="Diagram the code you selected">Visualise</button><button id="chatIdeateBtn" type="button" title="Write your own idea and have it challenged">Ideate</button><button id="chatReviewBtn" type="button" title="Keep this answer and open Review">Review</button><button id="chatHandoffBtn" type="button">Hand off</button></div>
       <details id="cursorPasteBlock" class="cursorPaste qaBlock">
@@ -367,6 +383,13 @@ export const LEARN_BODY = withControlHelp(`
           <button id="clearSolverSelectionBtn" class="hiddenBtn">Remove selected code</button>
           <input id="solverProblem" type="text" placeholder="Problem: what is broken or puzzling?">
           <textarea id="solverError" rows="3" placeholder="Optional: paste an error / stack trace / log lines\u2026"></textarea>
+          <div class="solverTraceRow">
+            <label class="solverTraceToggle"><input id="solverTraceToggle" type="checkbox"> Reasoning trace (reasoning model)</label>
+            <span id="solverTraceControls" class="solverTraceControls hidden" aria-hidden="true">
+              <button type="button" class="chatTempBtn solverTempBtn" data-temp="0.1" id="solverTempLow">T=0.1</button>
+              <button type="button" class="chatTempBtn solverTempBtn" data-temp="0.7" id="solverTempHigh">T=0.7</button>
+            </span>
+          </div>
           <div class="row">
             <button id="solveBtn">Solve with me</button>
             <button id="solveDirectBtn">Give me an answer</button>
@@ -400,7 +423,7 @@ export const LEARN_BODY = withControlHelp(`
       <details id="cardsBlock" open>
         <summary><span>Review &amp; drill</span><span class="summaryMeta">only what you keep</span></summary>
         <div class="detailsBody">
-          <p class="muted" id="reviewIntro">Nothing is added automatically: press <strong>Keep</strong> on an explanation to save that idea here. Open a card to practise it with a question you answer in your own words, a quiz, or a fill-in-the-blank. Ideas you miss come first; ideas you recall twice are marked solid. Use ✕ to remove a card. Filter by <strong>Data &amp; persistence</strong>, <strong>UI &amp; human interface</strong>, or <strong>Backend &amp; communication</strong> to choose what to practise.</p>
+          <p class="muted" id="reviewIntro">Nothing is added automatically: press <strong>Keep</strong> on an explanation, probe, or prompt quirk to save that idea here. Open a card to practise it with a question you answer in your own words, a quiz, or a fill-in-the-blank. Ideas you miss come first; ideas you recall twice are marked solid. Use ✕ to remove a card. Filter by <strong>Data &amp; persistence</strong>, <strong>UI &amp; human interface</strong>, <strong>Backend &amp; communication</strong>, or <strong>AI &amp; Inference</strong> to choose what to practise.</p>
           <div id="drill"></div>
           <div id="undoBar" class="hint hidden" role="status"></div>
           <div id="cards"></div>

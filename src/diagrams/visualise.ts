@@ -1,7 +1,9 @@
 import { analyzeDiagrams, type Diagram, type DiagramNode, type Diagrams } from './diagram';
+import { enrichDataFlowForLlm, llmPhysicsDiagram, type LlmGlassInput } from './llm-physics';
 import { javaTestingDiagram } from './junit-outline';
 import { parseSql, sqlCostDiagram, sqlFlowDiagram } from './sql';
 import type { CodeContext } from '../shared/types';
+export type { LlmGlassInput } from './llm-physics';
 
 export interface BranchCoverage {
   covered: number;
@@ -10,7 +12,7 @@ export interface BranchCoverage {
   outcomes?: number[];
 }
 export interface CoverageReport { file: string; lines: Record<number, BranchCoverage>; }
-export type Visualisations = Diagrams & Record<'decisions' | 'circuit' | 'wireframe' | 'cartesian' | 'growth' | 'context' | 'security', Diagram>;
+export type Visualisations = Diagrams & Record<'decisions' | 'circuit' | 'wireframe' | 'cartesian' | 'growth' | 'context' | 'security' | 'llmPhysics', Diagram>;
 const normal = (path: string): string => path.replace(/\\/g, '/').replace(/^\.\//, '');
 const sameFile = (a: string, b: string): boolean => normal(a) === normal(b) || normal(a).endsWith('/' + normal(b)) || normal(b).endsWith('/' + normal(a));
 const attrs = (xml: string): Record<string, string> => Object.fromEntries([...xml.matchAll(/([\w]+)=["']([^"']*)["']/g)].map((match) => [match[1]!, match[2]!]));
@@ -58,8 +60,11 @@ export function readCoverage(raw: string, file: string): CoverageReport {
   return { ...matches[0]!, file };
 }
 
-export function visualise(ctx: CodeContext, coverage?: CoverageReport): Visualisations {
-  const diagrams = analyzeDiagrams(ctx);
+export function visualise(ctx: CodeContext, coverage?: CoverageReport, glass?: LlmGlassInput | null): Visualisations {
+  let diagrams = analyzeDiagrams(ctx);
+  if (glass) {
+    diagrams = { ...diagrams, dataFlow: enrichDataFlowForLlm(ctx, diagrams.dataFlow, glass) };
+  }
   const junit = javaTestingDiagram(ctx);
   if (junit) {
     diagrams.testing = junit;
@@ -178,8 +183,11 @@ export function visualise(ctx: CodeContext, coverage?: CoverageReport): Visualis
   if (!multiTest && collaborators.length >= 2) availableTypes.push('circuit', 'wireframe');
   if (!multiTest && securityNodes.length) availableTypes.push('security');
   availableTypes.push('growth');
+  const llmPhysics = llmPhysicsDiagram(ctx, glass);
+  availableTypes.push('llmPhysics');
   if (chain || counts.length >= 2) availableTypes.push('cartesian');
-  return { ...diagrams, dependencies: dependency, architecture, decisions, context, security, cartesian, growth: sql ? sqlCostDiagram(sql, ctx.language) : growth, availableTypes,
+  return { ...diagrams, dependencies: dependency, architecture, decisions, context, security, cartesian, llmPhysics,
+    growth: sql ? sqlCostDiagram(sql, ctx.language) : growth, availableTypes,
     circuit: { ...dependency, caption: 'Circuit analogy: components and reference lines from the excerpt. Lines are software relationships, not electrical behaviour.' },
     wireframe: { ...dependency, caption: 'Isometric wireframe of the same source references. Depth separates components visually; it is not a measured distance.' } };
 }

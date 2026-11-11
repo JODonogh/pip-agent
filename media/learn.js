@@ -403,6 +403,11 @@ function renderExplanation(msg) {
   }
   if (msg.verify) renderVerify(msg.verify);
   if (Object.prototype.hasOwnProperty.call(msg, 'testOutline')) renderTestOutline(msg.testOutline);
+  if (msg.glassBox) {
+    glassBoxByModel[msg.glassBox.model] = msg.glassBox;
+    glassActiveModel = msg.glassBox.model;
+    renderGlassBoxDrawer();
+  }
   // Auditory mode (tired eyes): read the bottom line automatically.
   if (!msg.reviewUpdate && $('learnMode')?.value === 'auditory' && current.bottomLine) {
     vscode.postMessage({ type: 'speak', text: current.bottomLine, voice: $('voiceSelect')?.value || '' });
@@ -413,8 +418,151 @@ function deepSection(kind) {
   return [...document.querySelectorAll('.deepLazy[data-kind]')]
     .find((section) => section.getAttribute('data-kind') === kind);
 }
+const GLASS_COMPARE_MODELS = ['qwen2.5-coder:1.5b', 'qwen2.5-coder:14b'];
+let glassBoxByModel = {};
+let glassActiveModel = '';
+let glassBoxPending = false;
+function resetGlassBoxDrawer() {
+  glassBoxByModel = {};
+  glassActiveModel = '';
+  glassBoxPending = false;
+  const section = deepSection('glass-box');
+  const body = section?.querySelector('.deepBody');
+  if (body) {
+    body.textContent = 'Model telemetry and prompt anatomy appear after the overview.';
+    body.classList.add('muted');
+  }
+  if (section) {
+    section.open = false;
+    delete section.dataset.loaded;
+  }
+}
+function appendPromptWithAnchors(parent, text, anchors) {
+  const pre = document.createElement('pre');
+  pre.className = 'glassPromptBlock';
+  const unique = [...new Set((anchors || []).filter(Boolean))].sort((a, b) => b.length - a.length);
+  if (!unique.length) {
+    pre.textContent = text;
+    parent.appendChild(pre);
+    return;
+  }
+  const pattern = new RegExp(`(${unique.map((anchor) => anchor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'g');
+  for (const piece of String(text).split(pattern)) {
+    if (!piece) continue;
+    const isAnchor = unique.includes(piece);
+    if (isAnchor) {
+      const mark = document.createElement('mark');
+      mark.className = 'glassFewShot';
+      mark.title = 'Few-shot or format anchor from the explainer contract';
+      mark.textContent = piece;
+      pre.appendChild(mark);
+    } else pre.appendChild(document.createTextNode(piece));
+  }
+  parent.appendChild(pre);
+}
+function renderGlassBoxInspection(box) {
+  if (!box) return document.createDocumentFragment();
+  const frag = document.createDocumentFragment();
+  const telem = document.createElement('div');
+  telem.className = 'glassTelemetry';
+  const tps = box.tokensPerSecond != null ? `${Number(box.tokensPerSecond).toFixed(1)} tok/s` : 'n/a';
+  const latency = box.latencyMs != null ? `${Math.round(box.latencyMs)} ms` : 'n/a';
+  const promptTok = box.telemetry?.promptEvalCount ?? box.totalEstTokens;
+  const genTok = box.telemetry?.evalCount ?? 'n/a';
+  telem.textContent = `Model: ${box.model}${box.fromMock ? ' (mock)' : ''} | ~${box.totalEstTokens} est. prompt tokens | ${tps} | ${latency} round-trip | prompt tokens: ${promptTok} | completion tokens: ${genTok}`;
+  frag.appendChild(telem);
+  if (box.fewShotAnchors?.length) {
+    const anchors = document.createElement('p');
+    anchors.className = 'glassAnchors';
+    anchors.appendChild(document.createTextNode('In-context anchors in prompt: '));
+    box.fewShotAnchors.forEach((anchor, index) => {
+      if (index) anchors.appendChild(document.createTextNode('; '));
+      const mark = document.createElement('mark');
+      mark.className = 'glassFewShot';
+      mark.textContent = anchor;
+      anchors.appendChild(mark);
+    });
+    frag.appendChild(anchors);
+  }
+  if (box.ungroundedSpans?.length) {
+    const warn = document.createElement('p');
+    warn.className = 'glassUngrounded';
+    warn.textContent = `Possible drift or hallucination signals: ${box.ungroundedSpans.join('; ')}`;
+    frag.appendChild(warn);
+  }
+  for (const part of box.parts || []) {
+    const section = document.createElement('section');
+    section.className = 'glassPromptPart';
+    const title = document.createElement('h4');
+    title.textContent = `${part.role === 'system' ? 'System' : 'User'} — ${part.label} (~${part.estTokens} tokens)`;
+    section.appendChild(title);
+    appendPromptWithAnchors(section, part.content, [...(part.anchors || []), ...(box.fewShotAnchors || [])]);
+    frag.appendChild(section);
+  }
+  return frag;
+}
+function renderGlassBoxDrawer() {
+  const section = deepSection('glass-box');
+  const body = section?.querySelector('.deepBody');
+  if (!body) return;
+  const box = glassActiveModel ? glassBoxByModel[glassActiveModel] : Object.values(glassBoxByModel)[0];
+  if (!box) {
+    body.textContent = glassBoxPending ? 'Running comparison on the same selection…' : 'Explain this selection to load prompt anatomy.';
+    body.classList.add('muted');
+    return;
+  }
+  body.classList.remove('muted');
+  body.replaceChildren();
+  const toolbar = document.createElement('div');
+  toolbar.className = 'glassCompareRow';
+  const label = document.createElement('span');
+  label.className = 'muted';
+  label.textContent = 'A/B on this chunk:';
+  toolbar.appendChild(label);
+  for (const model of GLASS_COMPARE_MODELS) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'glassCompareBtn';
+    btn.textContent = model.split(':').pop() || model;
+    btn.title = model;
+    btn.setAttribute('aria-pressed', String(glassActiveModel === model || (!glassActiveModel && box.model === model)));
+    btn.classList.toggle('glassCompareActive', glassActiveModel === model || (!glassActiveModel && box.model === model));
+    btn.disabled = glassBoxPending;
+    btn.onclick = () => {
+      if (glassBoxByModel[model]) {
+        glassActiveModel = model;
+        renderGlassBoxDrawer();
+        return;
+      }
+      glassBoxPending = true;
+      glassActiveModel = model;
+      renderGlassBoxDrawer();
+      vscode.postMessage({ type: 'glassBoxCompare', model, sessionId: learningSessionId });
+    };
+    toolbar.appendChild(btn);
+  }
+  body.append(toolbar, renderGlassBoxInspection(box));
+  if (Object.keys(glassBoxByModel).length > 1) {
+    const table = document.createElement('table');
+    table.className = 'glassCompareTable';
+    table.innerHTML = '<thead><tr><th>Model</th><th>tok/s</th><th>Latency</th><th>Drift signals</th></tr></thead><tbody></tbody>';
+    const tbody = table.querySelector('tbody');
+    for (const model of GLASS_COMPARE_MODELS) {
+      const entry = glassBoxByModel[model];
+      if (!entry) continue;
+      const row = document.createElement('tr');
+      const drift = (entry.ungroundedSpans || []).length ? entry.ungroundedSpans.join(', ') : 'none flagged';
+      row.innerHTML = `<td>${model}</td><td>${entry.tokensPerSecond != null ? Number(entry.tokensPerSecond).toFixed(1) : 'n/a'}</td><td>${entry.latencyMs != null ? Math.round(entry.latencyMs) : 'n/a'} ms</td><td>${drift}</td>`;
+      tbody.appendChild(row);
+    }
+    body.appendChild(table);
+  }
+  section.dataset.loaded = '1';
+}
 function resetDeepSections() {
+  resetGlassBoxDrawer();
   document.querySelectorAll('.deepLazy[data-kind]').forEach((section) => {
+    if (section.getAttribute('data-kind') === 'glass-box') return;
     section.open = false;
     delete section.dataset.loaded;
     delete section.dataset.requested;
@@ -647,7 +795,7 @@ function diagramOptions() {
   const supplied = diagrams?.availableTypes;
   const available = (Array.isArray(supplied) ? supplied : ['dataFlow', 'sequence', 'dependencies', 'architecture', 'testing']).filter((type) => {
     const graph = diagrams?.[type];
-    if (['cartesian', 'growth'].includes(type) && graph?.series?.length) return true;
+    if (['cartesian', 'growth', 'llmPhysics'].includes(type) && graph?.series?.length) return true;
     if (!graph?.nodes?.length) return false;
     return type !== 'architecture' || (graph.nodes.length > 1 && graph.edges?.length > 0);
   });
@@ -656,6 +804,7 @@ function diagramOptions() {
     const shown = available.includes(type);
     if (type === 'cartesian') button.textContent = /request count/i.test(diagrams?.cartesian?.yLabel || '') ? 'Request counts' : 'Code estimate';
     if (type === 'growth') button.textContent = hasCostCards() ? 'Query performance' : 'Performance growth';
+    if (type === 'llmPhysics') button.textContent = 'LLM physics';
     button.classList.toggle('hidden', !shown);
   });
   if (!available.includes(diagramType)) diagramType = available[0] || 'dataFlow';
@@ -677,7 +826,7 @@ function visibleNodes() {
   const graph = diagrams?.[diagramType];
   if (!graph) return [];
   if (diagramType === 'sequence' && graph.sequence?.messages?.length) return graph.sequence.messages.map((message, index) => ({ id: `message:${index}`, kind: 'call', label: message.label, detail: `${message.label}${message.sourceLine ? ` at source line ${message.sourceLine}` : ''}` }));
-  if (['decisions', 'circuit', 'wireframe', 'cartesian', 'growth', 'context', 'security'].includes(diagramType)) return graph.nodes || [];
+  if (['decisions', 'circuit', 'wireframe', 'cartesian', 'growth', 'llmPhysics', 'context', 'security'].includes(diagramType)) return graph.nodes || [];
   const enabled = new Set([...document.querySelectorAll('.layerToggle:checked')].map((box) => box.getAttribute('data-layer')));
   enabled.add('core');
   if (diagramType === 'dependencies' || diagramType === 'architecture') { enabled.add('imports'); enabled.add('calls'); }
@@ -844,7 +993,7 @@ function specialDiagram(type, graph, nodes) {
     return svg;
   }
   if (type === 'growth' && !graph.series?.length) return costMapDiagram(graph, nodes);
-  if (['cartesian', 'growth'].includes(type) && graph.series?.length) {
+  if (['cartesian', 'growth', 'llmPhysics'].includes(type) && graph.series?.length) {
     const series = graph.series.filter((line) => Array.isArray(line.points) && line.points.length);
     const all = series.flatMap((line) => line.points).filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
     if (!all.length) return null;
@@ -996,8 +1145,13 @@ function renderDiagram() {
       host.appendChild(bridge);
       host.appendChild(requestCountingGuide());
     }
+    if (diagramType === 'llmPhysics' && diagrams.llmPhysics?.series?.length) {
+      const bridge = document.createElement('p'); bridge.className = 'muted';
+      bridge.textContent = 'Quadratic and linear curves are illustrative. Points labeled from Ollama or recent PIP stats are the measured glass-box layer; compare them after running Explain or a model probe.';
+      host.appendChild(bridge);
+    }
     if (diagramType === 'cartesian' && /request count/i.test(diagrams[diagramType]?.yLabel || '')) host.appendChild(requestCountingGuide());
-    if (['cartesian', 'growth'].includes(diagramType) && diagrams[diagramType]?.series?.length) {
+    if (['cartesian', 'growth', 'llmPhysics'].includes(diagramType) && diagrams[diagramType]?.series?.length) {
       const legend = document.createElement('div'); legend.className = 'chartLegend';
       (diagrams[diagramType].series || []).forEach((line, index) => { const item = document.createElement('span'); item.className = `plotLegend-${index % 3}`; item.textContent = `● ${line.name}${line.description ? ` — ${line.description}` : ''}`; legend.appendChild(item); });
       host.appendChild(legend);
@@ -1229,10 +1383,10 @@ window.addEventListener('message', (event) => {
     if (Object.prototype.hasOwnProperty.call(msg, 'testOutline')) renderTestOutline(msg.testOutline);
   } else if (msg.type === 'improvements') {
     $('improveBtn').disabled = false;
-    renderImprovements(msg.ideas || [], msg.file, msg.note);
+    renderImprovements(msg.ideas || [], msg.file, msg.note, msg.actorCritic);
   } else if (msg.type === 'pocIdeasResult') {
     $('pocIdeasBtn').disabled = false;
-    renderPocIdeas(msg.pocs || [], msg.file, msg.note);
+    renderPocIdeas(msg.pocs || [], msg.file, msg.note, msg.actorCritic);
   } else if (msg.type === 'ideaHelpReply') {
     if (!ideaHelpState || msg.id !== ideaHelpState.id || msg.requestId !== ideaHelpState.requestId) return;
     $('ideaHelpAnswer').textContent = msg.text;
@@ -1355,6 +1509,11 @@ window.addEventListener('message', (event) => {
     div.className = 'answer';
     div.appendChild(rich(msg.text, keywordSet));
     log.appendChild(div);
+  } else if (msg.type === 'glassBoxUpdate') {
+    if (msg.glassBox) glassBoxByModel[msg.model || msg.glassBox.model] = msg.glassBox;
+    glassActiveModel = msg.model || msg.glassBox?.model || glassActiveModel;
+    glassBoxPending = false;
+    renderGlassBoxDrawer();
   } else if (msg.type === 'deepDive') {
     const set = new Set((msg.keywords || []).map((k) => String(k).toLowerCase()));
     const section = deepSection(msg.kind);
@@ -1452,6 +1611,23 @@ window.addEventListener('message', (event) => {
 });
 
 /* ---------- Solver ---------- */
+let solverTraceOn = false;
+let solverTraceTemperature = 0.1;
+function setSolverTraceTemp(value) {
+  solverTraceTemperature = value;
+  for (const id of ['solverTempLow', 'solverTempHigh']) {
+    const button = $(id);
+    if (typeof button?.getAttribute !== 'function') continue;
+    button.classList.toggle('isActive', Number(button.getAttribute('data-temp')) === value);
+  }
+}
+function syncSolverTraceControls() {
+  const controls = $('solverTraceControls');
+  if (controls) {
+    controls.classList.toggle('hidden', !solverTraceOn);
+    controls.setAttribute('aria-hidden', String(!solverTraceOn));
+  }
+}
 function selectSolverResponseMode(mode) {
   solverResponseMode = mode === 'direct' ? 'direct' : 'together';
   for (const [id, value] of [['solveBtn', 'together'], ['solveDirectBtn', 'direct']]) {
@@ -1484,6 +1660,7 @@ function usefulSolverDetail(value) {
 function renderSolver(msg) {
   const host = $('solverResult');
   host.replaceChildren();
+  prependReasoningTrace(host, msg);
   const { reply, frame } = msg;
   selectSolverResponseMode(msg.mode || solverResponseMode);
   host.setAttribute('data-solver-mode', solverResponseMode);
@@ -1553,7 +1730,8 @@ function submitSolver(mode) {
   setSolverBusy(true);
   $('solverQuestionBox').hidden = true;
   $('solverResult').textContent = 'Thinking locally…';
-  vscode.postMessage({ type: 'solve', mode, problem, errorText, selection: solverSelection });
+  const trace = solverTraceOn ? { solverTrace: true, solverTemperature: solverTraceTemperature } : {};
+  vscode.postMessage({ type: 'solve', mode, problem, errorText, selection: solverSelection, ...trace });
 }
 on('solveBtn', 'click', () => submitSolver('together'));
 on('solveDirectBtn', 'click', () => submitSolver('direct'));
@@ -1572,8 +1750,25 @@ on('solverBlock', 'toggle', saveSolverState);
 on('solveNextBtn', 'click', () => {
   setSolverBusy(true);
   $('solverResult').textContent = 'Next hypothesis…';
-  vscode.postMessage({ type: 'solveNext', errorText: $('solverError').value });
+  const trace = solverTraceOn ? { solverTrace: true, solverTemperature: solverTraceTemperature } : {};
+  vscode.postMessage({ type: 'solveNext', errorText: $('solverError').value, ...trace });
 });
+on('solverTraceToggle', 'change', () => {
+  const box = $('solverTraceToggle');
+  solverTraceOn = !!(box && box.checked);
+  syncSolverTraceControls();
+  if (solverTraceOn) setSolverTraceTemp(solverTraceTemperature);
+  saveSolverState();
+});
+for (const id of ['solverTempLow', 'solverTempHigh']) {
+  on(id, 'click', () => {
+    const button = $(id);
+    if (typeof button?.getAttribute !== 'function') return;
+    setSolverTraceTemp(Number(button.getAttribute('data-temp') || 0.1));
+    saveSolverState();
+  });
+}
+syncSolverTraceControls();
 on('solveFixedBtn', 'click', () => vscode.postMessage({ type: 'solveFixed' }));
 
 /* ---------- A2UI: the drawer reshapes by intent (final stage) ---------- */
@@ -1611,6 +1806,10 @@ document.querySelectorAll('.styleChip').forEach((chip) =>
 document.querySelectorAll('.deepLazy[data-kind]').forEach((details) => {
   details.addEventListener('toggle', () => {
     const kind = details.getAttribute('data-kind');
+    if (kind === 'glass-box') {
+      if (details.open) renderGlassBoxDrawer();
+      return;
+    }
     if (details.open && !details.dataset.loaded && !details.dataset.requested) {
       details.dataset.requested = '1';
       details.querySelector('.deepBody').textContent = 'Preparing this section…';
@@ -1699,6 +1898,25 @@ function appendIdeaActions(row, idea) {
     row.appendChild(button);
   }
 }
+function appendActorCriticBanner(host, actorCritic) {
+  if (!actorCritic || !actorCritic.total) return;
+  const row = document.createElement('div');
+  row.className = 'actorCriticBanner muted';
+  const mode = actorCritic.crossModel ? 'cross-model' : 'same-model';
+  row.textContent =
+    `Generator–verifier (Actor–Critic, ${mode}): ${actorCritic.actorModel} proposes, ${actorCritic.criticModel} reviews. ` +
+    `Disagreement rate: ${actorCritic.disagreements}/${actorCritic.total} (${actorCritic.disagreementPct}).`;
+  host.appendChild(row);
+}
+function appendIdeaDebate(card, debate) {
+  if (!debate) return;
+  const row = document.createElement('div');
+  row.className = debate.disagrees ? 'actorCriticDivergence' : 'actorCriticAlign muted';
+  row.textContent = debate.disagrees
+    ? `Divergence: critic marked this ${debate.criticVerdict}; actor still proposed it.`
+    : 'Actor and critic align (context supported).';
+  card.appendChild(row);
+}
 function appendVerification(card, verification) {
   const status = document.createElement('div');
   status.className = 'ideaVerification muted';
@@ -1744,11 +1962,12 @@ function sourceLine(host, file) {
   about.textContent = `About ${file}`;
   host.appendChild(about);
 }
-function renderImprovements(ideas, file, note) {
+function renderImprovements(ideas, file, note, actorCritic) {
   const host = $('improveResult');
   if (!host) return;
   host.replaceChildren();
   sourceLine(host, file);
+  appendActorCriticBanner(host, actorCritic);
   if (!ideas.length) {
     const message = document.createElement('p');
     message.textContent = note || 'No grounded improvements were returned. Try a smaller selection or another lens.';
@@ -1792,17 +2011,19 @@ function renderImprovements(ideas, file, note) {
     appendIdeaActions(row, idea);
 
     card.append(metaRow, title, why, change);
+    appendIdeaDebate(card, idea.debate);
     appendVerification(card, idea.verification);
     card.appendChild(row);
     host.appendChild(card);
   }
 }
 
-function renderPocIdeas(pocs, file, note) {
+function renderPocIdeas(pocs, file, note, actorCritic) {
   const host = $('pocResult');
   if (!host) return;
   host.replaceChildren();
   sourceLine(host, file);
+  appendActorCriticBanner(host, actorCritic);
   if (!pocs.length) {
     const message = document.createElement('p');
     message.textContent = note || 'No testable experiments were returned. Describe one uncertainty you want to resolve.';
@@ -1842,6 +2063,7 @@ function renderPocIdeas(pocs, file, note) {
     appendIdeaActions(row, poc);
 
     card.append(metaRow, title, hook, hyp);
+    appendIdeaDebate(card, poc.debate);
     appendVerification(card, poc.verification);
     card.appendChild(row);
     host.appendChild(card);
@@ -2129,6 +2351,20 @@ function renderProbeResult(msg) {
   formatted.appendChild(body);
   if (rawPre) rawPre.textContent = msg.raw || '';
   if (msg.telemetry) updateTelemetryBar({ telemetry: msg.telemetry });
+  const keepRow = document.createElement('div');
+  keepRow.className = 'row';
+  const keep = document.createElement('button');
+  keep.type = 'button';
+  keep.textContent = 'Keep in Review';
+  keep.title = 'Save this probe observation for spaced repetition in the AI & Inference layer';
+  keep.onclick = () => {
+    const summary = String(msg.formatted || msg.raw || '').replace(/\s+/g, ' ').trim().slice(0, 480);
+    if (!summary) return;
+    const probe = msg.probeKey ? `Probe: ${msg.probeKey}` : 'Model probe';
+    vscode.postMessage({ type: 'mark', term: probe, bottomLine: summary });
+  };
+  keepRow.appendChild(keep);
+  formatted.appendChild(keepRow);
   setLabTab('formatted');
 }
 function submitAiLabQuery(raw) {
@@ -2401,11 +2637,39 @@ if (typeof MutationObserver !== 'undefined' && document.body) {
 
 
 /* ---------- Solve chat: pair / vibe, repository-grounded replies, learn from any selection ---------- */
-const chat = { mode: 'pair', turns: [], pending: null, seq: 0, picked: '' };
+const chat = { mode: 'pair', turns: [], pending: null, seq: 0, picked: '', debugTemperature: 0.1 };
 const CHAT_HINTS = {
   pair: 'Pair: PIP searches the repo, shows what it found, then asks you the next question instead of handing over the answer.',
   answer: 'Answer: replies to your latest question — use this for "how do I check that?" after Pair suggestions. Stays on the same anchored excerpt.',
+  debug: 'Debug trace: reasoning model with test-time compute visible above the reply. Compare T=0.1 vs T=0.7 for self-correction in the trace.',
 };
+function formatTraceMeta(msg) {
+  const bits = ['Reasoning trace'];
+  if (msg.debugTemperature != null) bits.push(`T=${msg.debugTemperature}`);
+  if (msg.traceModel) bits.push(msg.traceModel);
+  if (msg.traceTokensPerSecond != null) bits.push(`${Number(msg.traceTokensPerSecond).toFixed(1)} tok/s`);
+  return bits.join(' · ');
+}
+function prependReasoningTrace(parent, msg) {
+  if (!msg.reasoningTrace) return;
+  const details = document.createElement('details');
+  details.className = 'reasoningTrace';
+  const summary = document.createElement('summary');
+  summary.textContent = formatTraceMeta(msg);
+  const body = document.createElement('pre');
+  body.className = 'reasoningTraceBody';
+  body.textContent = msg.reasoningTrace;
+  details.append(summary, body);
+  parent.prepend(details);
+}
+function setChatTemp(value) {
+  chat.debugTemperature = value;
+  for (const id of ['chatTempLow', 'chatTempHigh']) {
+    const button = $(id);
+    if (typeof button?.getAttribute !== 'function') continue;
+    button.classList.toggle('isActive', Number(button.getAttribute('data-temp')) === value);
+  }
+}
 function inlineMd(parent, text) {
   for (const part of text.split(/(\*\*[^*\n]+\*\*|`[^`\n]+`)/)) {
     if (!part) continue;
@@ -2489,7 +2753,9 @@ function dispatchChat(text) {
   node.classList.add('muted');
   chat.pending = { id, node };
   $('chatSendBtn').disabled = true;
-  vscode.postMessage({ type: 'chat', id, text, mode: chat.mode, history });
+  const payload = { type: 'chat', id, text, mode: chat.mode, history };
+  if (chat.mode === 'debug') payload.debugTemperature = chat.debugTemperature ?? 0.1;
+  vscode.postMessage(payload);
 }
 
 function sendChat() {
@@ -2537,16 +2803,38 @@ on('cursorPasteExcerpt', 'input', () => {
 const initialPaste = vscode.getState?.()?.cursorPaste || {};
 if ($('cursorPasteExcerpt') && initialPaste.excerpt) $('cursorPasteExcerpt').value = initialPaste.excerpt;
 function setChatMode(mode) {
-  chat.mode = mode === 'answer' ? 'answer' : 'pair';
-  if ($('chatModeSwitch')) $('chatModeSwitch').setAttribute('aria-checked', String(chat.mode === 'answer'));
+  chat.mode = mode === 'answer' ? 'answer' : mode === 'debug' ? 'debug' : 'pair';
+  const isDebug = chat.mode === 'debug';
+  if ($('chatModeSwitch')) {
+    $('chatModeSwitch').disabled = isDebug;
+    if (!isDebug) $('chatModeSwitch').setAttribute('aria-checked', String(chat.mode === 'answer'));
+  }
   if ($('chatModePair')) $('chatModePair').classList.toggle('isActive', chat.mode === 'pair');
   if ($('chatModeVibe')) $('chatModeVibe').classList.toggle('isActive', chat.mode === 'answer');
+  if ($('chatModeDebugBtn')) $('chatModeDebugBtn').classList.toggle('isActive', isDebug);
+  const controls = $('chatDebugControls');
+  if (controls) {
+    controls.classList.toggle('hidden', !isDebug);
+    controls.setAttribute('aria-hidden', String(!isDebug));
+  }
   const hint = $('chatModeHint');
   if (hint) hint.textContent = CHAT_HINTS[chat.mode] || '';
 }
 on('chatModeSwitch', 'click', () => {
+  if (chat.mode === 'debug') return;
   setChatMode(chat.mode === 'answer' ? 'pair' : 'answer');
 });
+on('chatModeDebugBtn', 'click', () => {
+  setChatMode(chat.mode === 'debug' ? 'pair' : 'debug');
+  if (chat.mode === 'debug') setChatTemp(chat.debugTemperature ?? 0.1);
+});
+for (const id of ['chatTempLow', 'chatTempHigh']) {
+  on(id, 'click', () => {
+    const button = $(id);
+    if (typeof button?.getAttribute !== 'function') return;
+    setChatTemp(Number(button.getAttribute('data-temp') || 0.1));
+  });
+}
 /* Select text in a reply, then press Learn under the chat to explain it in the panel beside the editor. */
 on('chatLog', 'mouseup', () => {
   const picked = String(window.getSelection?.()?.toString() || '').trim();
@@ -2675,6 +2963,7 @@ window.addEventListener('message', (event) => {
   } else if (msg.type === 'chatReply' && chat.pending && chat.pending.id === msg.id) {
     const node = chat.pending.node;
     node.classList.remove('muted');
+    prependReasoningTrace(node, msg);
     fillChat(node, msg.text);
     chat.turns.push({ role: 'assistant', text: msg.text });
     const foot = document.createElement('div');

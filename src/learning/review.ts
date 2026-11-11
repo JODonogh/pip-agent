@@ -22,11 +22,20 @@ export const LEARNING_LAYERS: Record<LearningLayer, { label: string; filterLabel
     filterLabel: 'Backend & communication',
     focus: 'Object and functional design, concurrency, REST/gRPC contracts, distributed communication, failure handling and integration tests.',
   },
+  ai: {
+    label: 'AI & Inference Mechanics',
+    filterLabel: 'AI & Inference',
+    focus: 'Attention heads, tokenization, quantization, prompt conditioning, reasoning traces, and sampling parameters.',
+  },
 };
 
 /** Which practice layer a piece of text belongs to, judged from its content (SQL in a Java file is still SQL). */
 export function inferLayer(text: string): LearningLayer | undefined {
   if (/\bSELECT\b[\s\S]*\bFROM\b|\b(INSERT\s+INTO|UPDATE\s+\w+\s+SET|DELETE\s+FROM|CREATE\s+TABLE|ALTER\s+TABLE)\b|\bGROUP\s+BY\b|\bLEFT\s+JOIN\b|\bLIKE\b|\bEXISTS\s*\(|\bCAST\s*\(/i.test(text)) return 'data';
+  if (/\b(temperature|top[_-]?p|num_ctx|num_predict|tokeniz|quantiz|attention heads?|kv cache|reasoning trace|redacted_thinking|test-time compute|tokens per second|eval_count|prompt eval|sampling parameter|greedy decoding|logits|transformer block|feed-forward|glass-?box|actor-?critic|generator-?verifier)\b/i.test(text)) {
+    return 'ai';
+  }
+  if (/\b(ollama|deepseek-r1|qwen2\.5|phi-?4|mistral|llm inference|pip\.model|pip\.reasoningModel|empirical probe)\b/i.test(text)) return 'ai';
   if (/\b(useState|useEffect|useMemo|React|tsx|JSX|Canvas Kit|<\/?div)\b|<\/\w+>/.test(text)) return 'frontend';
   if (/@(Service|Repository|RestController|Controller|Transactional|Entity)\b|\bpublic\s+(class|record|interface)\b|\bSpring\b/.test(text)) return 'backend';
   return undefined;
@@ -34,12 +43,12 @@ export function inferLayer(text: string): LearningLayer | undefined {
 
 export function layerOf(concept: Concept): LearningLayer | undefined {
   if (concept.learningLayer && concept.learningLayer in LEARNING_LAYERS) return concept.learningLayer;
-  const sql = inferLayer(`${concept.term}\n${concept.bottomLine}`);
-  if (sql === 'data') return sql;
+  const fromText = inferLayer(`${concept.term}\n${concept.bottomLine}`);
+  if (fromText) return fromText;
   if (/\.(sql|prisma)$/i.test(concept.file)) return 'data';
   if (/\.(tsx?|jsx?)$/i.test(concept.file)) return 'frontend';
   if (/\.(java|kt)$/i.test(concept.file)) return 'backend';
-  return inferLayer(`${concept.term}\n${concept.bottomLine}`);
+  return undefined;
 }
 
 export function drillFocus(concept: Concept): string {

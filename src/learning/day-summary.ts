@@ -45,6 +45,30 @@ function questionFor(concept: Concept): string {
   if (/\b(?:stream|map|filter|reduce|collect|toList)\b/i.test(cue)) {
     return `For ${term}, trace one input through the transformation; what should happen for an empty input or one filtered-out value?`;
   }
+  if (/\b(reasoning trace|redacted_thinking|test-time compute)\b/i.test(cue)) {
+    return `For ${term}, what stays in the hidden trace versus the visible answer, and what observation would show the model correcting itself before emitting the reply?`;
+  }
+  if (/\b(temperature|greedy|sampling|top[_-]?p)\b/i.test(cue) && /\b(model|inference|ollama|token)\b/i.test(cue)) {
+    return `For ${term}, how would T=0.1 differ from T=0.7 on the same prompt, and what metric or trace would you compare?`;
+  }
+  if (/\b(tokeniz|vocabulary|BPE|byte-pair)\b/i.test(cue)) {
+    return `For ${term}, how does tokenization change cost or truncation for this prompt, and what boundary string would expose a split artifact?`;
+  }
+  if (/\b(quantiz|GGUF|Q4|Q8|bitsandbytes)\b/i.test(cue)) {
+    return `For ${term}, what accuracy or latency trade-off does this quantization imply, and what check would show degraded output?`;
+  }
+  if (/\b(attention head|multi-head|self-attention)\b/i.test(cue)) {
+    return `For ${term}, what would each head specialise in for this task, and what probe would falsify that story?`;
+  }
+  if (/\b(prompt conditioning|system prompt|\[INTENT:|num_ctx|context window)\b/i.test(cue)) {
+    return `For ${term}, which instruction tokens anchor behaviour, and what would you remove or shorten to see conditioning drift?`;
+  }
+  if (/\b(actor-?critic|generator-?verifier|disagreement rate)\b/i.test(cue)) {
+    return `For ${term}, what did the generator propose that the critic rejected, and what evidence would reconcile the two passes?`;
+  }
+  if (/\b(empirical probe|tokens per second|eval_count)\b/i.test(cue)) {
+    return `For ${term}, which timing field measures prefill versus decode, and what would you rerun to confirm the observation?`;
+  }
   return `For ${term}, what contract does the code promise, and which boundary input would test whether that promise holds?`;
 }
 

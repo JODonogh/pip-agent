@@ -48,6 +48,19 @@ describe('daily retrieval practice', () => {
     expect(buildDayReview([], '2026-11-02').questions).toEqual([]);
   });
 
+  it('asks retrieval questions tuned to kept AI mechanics observations', () => {
+    const ai = note({
+      id: 'temp-probe',
+      term: 'debug temperature',
+      bottomLine: 'Compared temperature 0.1 vs 0.7 on the same Ollama model; trace length diverged.',
+      file: 'provider.ts',
+    });
+    const question = buildDayReview([ai], '2026-11-02').questions[0]!.question;
+    expect(question).toContain('T=0.1');
+    expect(question).toContain('0.7');
+    expect(question).not.toContain('diverged');
+  });
+
   it('prioritises missed concepts, deduplicates a kept idea and preserves its hypothesis status', () => {
     const weak = note({ id: 'weak', term: 'order dependency', file: 'OrderTest.java', bottomLine: 'Hypothesis to check: order changes the result.', misses: 2 });
     const questions = retrievalQuestions([note(), weak, { ...weak, id: 'same-idea' }]);

@@ -10,7 +10,12 @@
   let activeDrill = null;
   let undoTimer = null;
   let selectedLayer = 'all';
-  const layers = { data: 'Data & persistence', frontend: 'UI & human interface', backend: 'Backend & communication' };
+  const layers = {
+    data: 'Data & persistence',
+    frontend: 'UI & human interface',
+    backend: 'Backend & communication',
+    ai: 'AI & Inference',
+  };
   let keptConcepts = [];
 
   // This interactive list replaces the read-only copy that the beside-editor panel shows.

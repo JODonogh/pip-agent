@@ -101,11 +101,36 @@ export function normalizeCurriculumFacet(raw: string): string {
 
 /** Remove chain-of-thought wrappers so DeepSeek-R1 style output fits the 3-part card. */
 export function stripModelThinking(raw: string): string {
-  return raw
-    .replace(/<think>[\s\S]*?<\/redacted_thinking>/gi, '')
-    .replace(/[\s\S]*?<\/think>/gi, '')
-    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
-    .trim();
+  return splitReasoningTrace(raw).answer;
+}
+
+/** Split DeepSeek-R1 style traces from the visible answer (test-time compute inspection). */
+export function splitReasoningTrace(raw: string): { answer: string; thinking: string; blocks: string[] } {
+  const blocks: string[] = [];
+  const patterns = [
+    /<think>([\s\S]*?)<\/redacted_thinking>/gi,
+    /<thinking>([\s\S]*?)<\/thinking>/gi,
+  ];
+  for (const pattern of patterns) {
+    for (const match of raw.matchAll(pattern)) {
+      const body = match[1]?.trim();
+      if (body) blocks.push(body);
+    }
+  }
+  const thinkTag = /[\s\S]*?<\/think>/i.exec(raw);
+  if (thinkTag) {
+    const body = thinkTag[0].replace(/<\/think>\s*$/i, '').trim();
+    if (body) blocks.push(body);
+  }
+  let answer = raw;
+  answer = answer.replace(/<think>[\s\S]*?<\/redacted_thinking>/gi, '');
+  answer = answer.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+  answer = answer.replace(/[\s\S]*?<\/think>/gi, '');
+  return {
+    answer: answer.trim(),
+    thinking: blocks.join('\n\n---\n\n'),
+    blocks,
+  };
 }
 
 /** Parse the AI Lab micro-card contract (4-part Brilliant/Duolingo or legacy 3-part). */

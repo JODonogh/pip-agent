@@ -74,7 +74,15 @@ export class OllamaProvider implements ModelProvider {
     }
   }
 
-  async chat(messages: readonly ChatMessage[], model: string, maxTokens = 380, signal?: AbortSignal, contextSize = 4096): Promise<ProviderResult> {
+  async chat(
+    messages: readonly ChatMessage[],
+    model: string,
+    maxTokens = 380,
+    signal?: AbortSignal,
+    inference: { contextSize?: number; temperature?: number } = {},
+  ): Promise<ProviderResult> {
+    const contextSize = inference.contextSize ?? 4096;
+    const temperature = inference.temperature ?? 0.2;
     const started = Date.now();
     const url = new URL('/api/chat', this.base);
     const res = await this.fetchFn(url, {
@@ -87,7 +95,7 @@ export class OllamaProvider implements ModelProvider {
         // Speed, staying in the Mistral family: keep the model loaded between
         // turns, cap output per intent, and use a context sized for a selection.
         keep_alive: '30m',
-        options: { temperature: 0.2, num_predict: maxTokens, num_ctx: contextSize },
+        options: { temperature, num_predict: maxTokens, num_ctx: contextSize },
         messages: messages.map((m) => ({ role: m.role, content: m.content })),
       }),
     });

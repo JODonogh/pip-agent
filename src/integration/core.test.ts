@@ -18,6 +18,7 @@ import {
   parsePocIdeas,
   parseSolver,
   stripModelThinking,
+  splitReasoningTrace,
 } from '../shared/evaluator';
 import { explainPrompt, improveCodebasePrompt, pocIdeasPrompt } from '../agents/prompts';
 import { pickNextDailyBite, CURRICULUM_BITES } from '../learning/ai-curriculum';
@@ -147,7 +148,7 @@ describe('OllamaProvider', () => {
     }) as unknown as typeof fetch;
     const provider = new OllamaProvider('http://127.0.0.1:11434', fetchFn);
     await provider.chat([{ role: 'user', content: 'small' }], 'local');
-    await provider.chat([{ role: 'user', content: 'comparison' }], 'local', 380, undefined, 8192);
+    await provider.chat([{ role: 'user', content: 'comparison' }], 'local', 380, undefined, { contextSize: 8192 });
     expect(bodies.map(body => body.options.num_ctx)).toEqual([4096, 8192]);
   });
   it('throws on a dead server so the orchestrator can fall back', async () => {
@@ -218,6 +219,16 @@ describe('evaluator', () => {
     expect(card.concept).toBe('Tokens.');
     expect(card.wherePip).toContain('provider.ts');
     expect(card.experiment).toContain('log line');
+  });
+  it('splits reasoning traces from visible answers', () => {
+    const tagged = '<think>step one\nre-check</think>\nVisible answer.';
+    const split = splitReasoningTrace(tagged);
+    expect(split.thinking).toContain('step one');
+    expect(split.answer).toBe('Visible answer.');
+    const xml = '<thinking>re-check hypothesis</thinking>\nCoach reply.';
+    const xmlSplit = splitReasoningTrace(xml);
+    expect(xmlSplit.thinking).toContain('re-check');
+    expect(xmlSplit.answer).toBe('Coach reply.');
   });
   it('ships at least 30 curriculum concepts across five tracks', () => {
     expect(CURRICULUM_BITES.length).toBeGreaterThanOrEqual(30);

@@ -59,7 +59,7 @@ function webview(initialState: Record<string, unknown> = {}) {
     const section = new Element('details'); section.setAttribute('data-kind', kind); section.className = 'deepLazy';
     const body = new Element(); body.className = 'deepBody muted'; section.appendChild(body); return section;
   });
-  const buttons = ['dataFlow', 'sequence', 'dependencies', 'architecture', 'testing', 'decisions', 'circuit', 'wireframe', 'cartesian', 'context', 'security', 'growth'].map((type) => {
+  const buttons = ['dataFlow', 'sequence', 'dependencies', 'architecture', 'testing', 'decisions', 'circuit', 'wireframe', 'cartesian', 'context', 'security', 'growth', 'llmPhysics'].map((type) => {
     const button = new Element('button'); button.className = 'diagramTypeBtn'; button.setAttribute('data-type', type); return button;
   });
   const family = new Element('select');
@@ -305,6 +305,7 @@ describe('focused controls and feedback', () => {
     expect(controls.filter(([, tag]) => tag === 'summary').some(([, , attrs]) => /\btitle=/.test(attrs!))).toBe(false);
     expect(LEARN_BODY).not.toContain('id="openBesideBtn"');
     expect(LEARN_BODY).toContain('id="pipResetBtn"');
+    expect(LEARN_BODY).toContain('id="glassBoxDrawer"');
     expect(LEARN_BODY).toContain('pip-toolbar-row');
     expect(LEARN_BODY).toContain('CS · design · testing');
     const panelCss = readFileSync('media/panel.css', 'utf8');
