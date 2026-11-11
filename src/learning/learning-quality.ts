@@ -1,4 +1,4 @@
-import { logEvaluatorDiagnostic, markExperimentalDraft } from '../platform/diagnostics';
+import { appendEvaluatorDiagnosticNote, logEvaluatorDiagnostic, logEvaluatorDrop, markExperimentalDraft } from '../platform/diagnostics';
 import { evaluateExplanation } from '../shared/evaluator';
 import { metaphorScaffold } from '../ideation/ideation';
 import { conceptualDbTheoryWithoutSchema } from '../solver/searcher';
@@ -42,13 +42,6 @@ export function guardExplanation(ctx: CodeContext, explanation: Explanation): Ex
   const clientFixture = vitestModuleMock(ctx) && delegatesFetch(ctx) && /\bcreateClient\s*\(/.test(ctx.selection);
   const codeDump = [explanation.bottomLine, ...explanation.chunks.map((chunk) => chunk.title)].some((value) =>
     value.length > 100 && /\bvi\s*\.\s*mock\s*\(|\bcreateClient\s*\(/.test(value) && /[{};]|=>/.test(value));
-  if (clientFixture && codeDump) return {
-    bottomLine: `Vitest replaces a client module through ${/\basync\b/.test(ctx.selection) ? 'an asynchronous' : 'a'} factory, while the client delegates transport through its fetch option.`,
-    chunks: [
-      { title: 'Module factory', body: 'The factory supplies the replacement exports that consumers receive from the mocked module. Creating a client inside that factory does not by itself replace the client’s downstream transport.' },
-      { title: 'Transport seam', body: 'Passing a fetch callback as an option exposes a dependency boundary. The shown callback forwards to the current fetch implementation; inspect wider setup to establish whether that implementation is stubbed, intercepted, or allowed to make network requests.' },
-    ], repaired: true,
-  };
   const fix = (value: string): string => {
     let readable = readableMath(value);
     if (vitestModuleMock(ctx)) readable = readable.replace(/\bJest\b/g, 'Vitest');
@@ -61,6 +54,22 @@ export function guardExplanation(ctx: CodeContext, explanation: Explanation): Ex
       ? 'This escapes LIKE wildcard characters; SQL injection protection depends on parameter binding, which this excerpt does not establish.'
       : readable;
   };
+  if (clientFixture && codeDump) {
+    logEvaluatorDrop('Model echoed executable fixture in chunk title or bottom line', JSON.stringify(explanation));
+    return markExperimentalDraft(
+      {
+        ...explanation,
+        bottomLine: fix(explanation.bottomLine),
+        chunks: explanation.chunks.map((chunk) => ({
+          title: readableMath(chunk.title),
+          body: fix(chunk.body),
+        })),
+      },
+      'guardExplanation',
+      'Model echoed executable fixture in chunk title or bottom line',
+      JSON.stringify(explanation),
+    );
+  }
   const source = `${ctx.selection}\n${ctx.surrounding}`.toLowerCase();
   const mentionsUnsupported = (value: string): boolean => {
     const text = value.toLowerCase();
@@ -74,18 +83,25 @@ export function guardExplanation(ctx: CodeContext, explanation: Explanation): Ex
     (chunk) => !mentionsUnsupported(`${chunk.title} ${chunk.body}`),
   );
   const dropped = kept.length !== explanation.chunks.length;
+  let dropReason = '';
   if (dropped) {
     const removed = explanation.chunks
       .filter((chunk) => mentionsUnsupported(`${chunk.title} ${chunk.body}`))
       .map((chunk) => chunk.title)
       .join('; ');
-    logEvaluatorDiagnostic('guardExplanation', 'Removed chunks not grounded in selection', removed.slice(0, 400));
+    dropReason = 'Removed chunks mentioning status or exception not present in selection';
+    logEvaluatorDrop(dropReason, removed);
+    logEvaluatorDiagnostic('guardExplanation', dropReason, removed.slice(0, 400));
   }
   const bottomLineRaw = fix(explanation.bottomLine);
-  const bottomLine =
-    mentionsUnsupported(bottomLineRaw) && kept.length
-      ? `This excerpt covers: ${kept.map((chunk) => chunk.title).join('; ')}.`
-      : bottomLineRaw;
+  let bottomLine = bottomLineRaw;
+  if (mentionsUnsupported(bottomLineRaw)) {
+    const reason = 'Bottom line mentions status or exception not present in selection';
+    logEvaluatorDrop(reason, bottomLineRaw);
+    bottomLine = appendEvaluatorDiagnosticNote(bottomLineRaw, reason);
+  } else if (dropReason) {
+    bottomLine = appendEvaluatorDiagnosticNote(bottomLineRaw, dropReason);
+  }
   const chunks = kept.map((chunk) => ({ title: readableMath(chunk.title), body: fix(chunk.body) }));
   return { bottomLine, chunks, repaired: explanation.repaired || dropped || bottomLine !== explanation.bottomLine ||
     chunks.some((chunk, index) => chunk.body !== explanation.chunks[index]?.body || chunk.title !== explanation.chunks[index]?.title) };
@@ -322,11 +338,18 @@ export function evaluateDeep(raw: string, ctx: CodeContext, kind: string): Expla
     const reason = codeDump
       ? 'foundations guard: model returned a code dump instead of a principle lesson'
       : 'foundations guard: missing transferable CS/design/testing vocabulary or transfer exercise';
-    return markExperimentalDraft(parsed, 'foundations-grounding', reason, `kind=${kind}`);
+    return markExperimentalDraft(parsed, 'foundations-grounding', reason, raw);
   }
   if (kind === 'analogy' && (!(ANALOGY_DOMAINS.some((domain) => domain.words.test(text)) || /\b(stencil|library|kitchen|cook|book|mail|rail|desk|gate|recipe|sieve|assembly|post|theatre|stage|factory|prop|courier)\w*/i.test(text)) ||
       !/\b(like|analogy|treat|think of|picture|imagine|maps?|represents?|corresponds?|as if)\b/i.test(text) ||
-      !/\b(limit|unlike|does not|doesn't|cannot|breaks down|only illustrates)\b/i.test(text))) return analogyFallback(ctx);
+      !/\b(limit|unlike|does not|doesn't|cannot|breaks down|only illustrates)\b/i.test(text))) {
+    return markExperimentalDraft(
+      parsed,
+      'analogy-grounding',
+      'analogy guard: missing domain mapping, hedge language, or explicit limit',
+      raw,
+    );
+  }
   if (/trade[- ]?off|performance/i.test(kind) && (
     !/\b(benefit|buys|clarity|readab|isolation|fidelity|saves|reduces)\w*/i.test(text) ||
     !/\b(cost|but|however|allocation|memory|latency|complexity|overhead|risk)\w*/i.test(text) ||
@@ -335,7 +358,7 @@ export function evaluateDeep(raw: string, ctx: CodeContext, kind: string): Expla
       parsed,
       'performance-tradeoff-grounding',
       'trade-off guard: model reply lacks benefit/cost/when structure',
-      `kind=${kind}`,
+      raw,
     );
   }
   return parsed;
@@ -383,7 +406,10 @@ export function evaluateLearningReview(raw: string, ctx: CodeContext, current: E
     return { status: 'uncertain', correction: issue.slice(0, 300), text: 'The reviewer found an issue but returned no rewrite; the answer is unchanged.' };
   }
   const explanation = dropEchoChunks(guardExplanation(ctx, evaluateExplanation(raw)));
-  if (!explanation.chunks.length || explanation.bottomLine.startsWith('The model did not lead') || JSON.stringify(explanation) === JSON.stringify(current)) {
+  if (!explanation.chunks.length
+    || explanation.bottomLine.startsWith('The model did not lead')
+    || explanation.bottomLine.includes('[Diagnostic Note: Evaluator check failed:')
+    || JSON.stringify(explanation) === JSON.stringify(current)) {
     return { status: 'uncertain', text: 'The background reviewer did not return a usable correction; the answer is unchanged.' };
   }
   return { status: 'revised', explanation, text: `Background review revised a claim: ${issue.slice(0, 220)} Source clue: “${evidence}”. No live test was run.` };

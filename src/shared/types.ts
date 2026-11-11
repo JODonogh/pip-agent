@@ -5,6 +5,16 @@ export interface ChatMessage {
   content: string;
 }
 
+export interface ProviderTelemetry {
+  totalDurationMs: number;
+  loadDurationMs: number;
+  promptEvalCount: number;
+  promptEvalDurationMs: number;
+  evalCount: number;
+  evalDurationMs: number;
+  tokensPerSecond: number;
+}
+
 export interface ProviderResult {
   text: string;
   model: string;
@@ -18,6 +28,10 @@ export interface ProviderResult {
   evalDuration?: number;
   /** Derived from evalCount and evalDuration when Ollama reports both. */
   tokensPerSecond?: number;
+  /** Raw model output before sanitization (may include reasoning blocks). */
+  rawText?: string;
+  /** Parsed Ollama timing metadata from the inference response. */
+  telemetry?: ProviderTelemetry;
 }
 
 export interface ModelProvider {

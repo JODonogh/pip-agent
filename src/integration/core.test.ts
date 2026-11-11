@@ -21,7 +21,12 @@ import {
 } from '../shared/evaluator';
 import { explainPrompt, improveCodebasePrompt, pocIdeasPrompt } from '../agents/prompts';
 import { pickNextDailyBite, CURRICULUM_BITES } from '../learning/ai-curriculum';
-import { aiLabPrompt } from '../learning/prompts';
+import { aiLabPrompt, empiricalProbePrompt } from '../learning/prompts';
+import {
+  appendEvaluatorDiagnosticNote,
+  logEvaluatorDrop,
+  setEvaluatorDiagnostics,
+} from '../platform/diagnostics';
 import { normalizeCurriculumFacet } from '../shared/evaluator';
 import { assertLocalhost } from '../shared/types';
 import { MockProvider, OllamaProvider } from '../platform/provider';
@@ -57,6 +62,8 @@ describe('OllamaProvider', () => {
         message: { content: 'BOTTOM_LINE: hi' },
         eval_count: 40,
         eval_duration: 2e9,
+        total_duration: 5e9,
+        prompt_eval_count: 12,
       }),
     })) as unknown as typeof fetch;
     const provider = new OllamaProvider('http://127.0.0.1:11434', fetchFn);
@@ -67,6 +74,25 @@ describe('OllamaProvider', () => {
     expect(result.evalDuration).toBe(2e9);
     expect(result.tokensPerSecond).toBe(20);
     expect(result.latencyMs).toBeGreaterThanOrEqual(0);
+    expect(result.telemetry?.promptEvalCount).toBe(12);
+    expect(result.telemetry?.totalDurationMs).toBe(5000);
+  });
+  it('preserves redacted thinking blocks in rawText', async () => {
+    const content = '<think>step one</think>\nBOTTOM_LINE: visible';
+    const fetchFn = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        message: { content },
+        eval_count: 8,
+        eval_duration: 8e8,
+      }),
+    })) as unknown as typeof fetch;
+    const provider = new OllamaProvider('http://127.0.0.1:11434', fetchFn);
+    const result = await provider.chat([{ role: 'user', content: 'probe' }], 'deepseek-r1:8b');
+    expect(result.rawText).toContain('<think>');
+    expect(result.rawText).toContain('step one');
+    expect(result.text).toContain('visible');
   });
   it('lists installed models from /api/tags', async () => {
     const fetchFn = vi.fn(async (input: RequestInfo | URL) => {
@@ -92,6 +118,24 @@ describe('OllamaProvider', () => {
     const fetchFn = vi.fn(async () => {
       throw new Error('ECONNREFUSED');
     }) as unknown as typeof fetch;
+    const provider = new OllamaProvider('http://127.0.0.1:11434', fetchFn);
+    await expect(provider.getInstalledModels()).resolves.toEqual(['mock']);
+  });
+  it('falls back to mock when /api/tags returns an empty model list', async () => {
+    const fetchFn = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ models: [] }),
+    })) as unknown as typeof fetch;
+    const provider = new OllamaProvider('http://127.0.0.1:11434', fetchFn);
+    await expect(provider.getInstalledModels()).resolves.toEqual(['mock']);
+  });
+  it('falls back to mock when /api/tags is not ok', async () => {
+    const fetchFn = vi.fn(async () => ({
+      ok: false,
+      status: 503,
+      json: async () => ({}),
+    })) as unknown as typeof fetch;
     const provider = new OllamaProvider('http://127.0.0.1:11434', fetchFn);
     await expect(provider.getInstalledModels()).resolves.toEqual(['mock']);
   });
@@ -203,6 +247,43 @@ describe('evaluator', () => {
     expect(msgs[1]?.content).toContain('Model: qwen2.5-coder:14b');
     expect(msgs[1]?.content).toContain('const x = 1;');
     expect(aiLabPrompt('solo question', 'all', 'mock')[1]?.content).not.toContain('Open editor context');
+  });
+  it('empiricalProbePrompt builds probe messages without emojis', () => {
+    const ctx = {
+      file: 'a.ts', line: 1, language: 'typescript', selection: 'export const x = 1;', surrounding: '',
+    };
+    const probes = ['scale_negative', 'test_time_compute', 'synthetic_vs_web', 'attention_temperature', 'custom'] as const;
+    const emoji = /[\u{1F300}-\u{1FAFF}]/u;
+    for (const key of probes) {
+      const messages = empiricalProbePrompt(key, 'Inspect attention maps.', 'qwen2.5-coder:3b', ctx);
+      const joined = messages.map((message) => message.content).join('\n');
+      expect(messages.length).toBeGreaterThan(0);
+      expect(messages.every((message) => message.role === 'system' || message.role === 'user')).toBe(true);
+      expect(joined).not.toMatch(emoji);
+      expect(joined).toContain('export const x = 1;');
+    }
+    const custom = empiricalProbePrompt('custom', 'Run a latency sweep.', 'mock', ctx);
+    expect(custom).toHaveLength(1);
+    expect(custom[0]?.role).toBe('user');
+    expect(custom[0]?.content).toContain('Run a latency sweep.');
+  });
+  it('logEvaluatorDrop and diagnostic notes preserve draft text', () => {
+    const lines: string[] = [];
+    setEvaluatorDiagnostics((line) => lines.push(line));
+    logEvaluatorDrop('regex guard failed', 'BOTTOM_LINE: draft only');
+    expect(lines.some((line) => line.includes('Agent PIP Diagnostics'))).toBe(true);
+    expect(lines.some((line) => line.includes('regex guard failed'))).toBe(true);
+    const noted = appendEvaluatorDiagnosticNote('Keep me', 'regex guard failed');
+    expect(noted).toContain('Keep me');
+    expect(noted).toContain('[Diagnostic Note: Evaluator check failed: regex guard failed]');
+    setEvaluatorDiagnostics(null);
+  });
+  it('evaluateExplanation keeps model chunks when BOTTOM_LINE is missing', () => {
+    const raw = '### Only chunk\nBody without a bottom line.';
+    const parsed = evaluateExplanation(raw);
+    expect(parsed.bottomLine).toContain('Only chunk');
+    expect(parsed.bottomLine).toContain('[Diagnostic Note: Evaluator check failed:');
+    expect(parsed.chunks[0]?.title).toBe('Only chunk');
   });
   it('mock provider explains deterministically', async () => {
     const mock = new MockProvider();

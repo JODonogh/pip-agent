@@ -1436,14 +1436,18 @@ window.addEventListener('message', (event) => {
     renderAiLabReply(msg);
   } else if (msg.type === 'aiLabError') {
     setAiLabLoading(false);
-    const out = $('pipAiLabOutput');
-    if (!out) return;
-    out.hidden = false;
-    out.replaceChildren();
+    const shell = $('pipLabResult');
+    const formatted = $('pipContentFormatted');
+    if (!shell || !formatted) return;
+    shell.hidden = false;
+    formatted.replaceChildren();
     const err = document.createElement('p');
     err.className = 'pip-ai-lab-error';
     err.textContent = msg.text || 'AI Lab request failed.';
-    out.appendChild(err);
+    formatted.appendChild(err);
+    setLabTab('formatted');
+  } else if (msg.type === 'probeResult') {
+    renderProbeResult(msg);
   }
 });
 
@@ -1974,14 +1978,19 @@ function fillModelSelector(models, selected) {
   }
   if (prior && [...select.options].some((o) => o.value === prior)) select.value = prior;
 }
+function updateTelemetryBar(metrics = {}) {
+  const telem = metrics.telemetry || {};
+  const tps = metrics.tokensPerSecond ?? telem.tokensPerSecond;
+  const latency = metrics.latencyMs ?? telem.totalDurationMs;
+  const evalCount = metrics.evalCount ?? telem.evalCount;
+  const promptCount = telem.promptEvalCount ?? metrics.promptEvalCount;
+  if (tps != null && $('pipStatTps')) $('pipStatTps').textContent = `${Number(tps).toFixed(1)} tok/s`;
+  if (latency != null && $('pipStatLatency')) $('pipStatLatency').textContent = `${Math.round(latency)} ms`;
+  if (evalCount != null && $('pipStatTokens')) $('pipStatTokens').textContent = String(evalCount);
+  if (promptCount != null && $('pipStatPrompt')) $('pipStatPrompt').textContent = String(promptCount);
+}
 function updateModelMetrics(metrics = {}) {
-  const bar = $('pipModelMetrics');
-  if (!bar) return;
-  const { tokensPerSecond, latencyMs } = metrics;
-  if (tokensPerSecond == null && latencyMs == null) return;
-  bar.hidden = false;
-  if ($('pipMetricTps') && tokensPerSecond != null) $('pipMetricTps').textContent = `${Number(tokensPerSecond).toFixed(1)} tok/s`;
-  if ($('pipMetricLatency') && latencyMs != null) $('pipMetricLatency').textContent = `${Math.round(latencyMs)} ms`;
+  updateTelemetryBar(metrics);
 }
 function formatAiLabTelemetry(metrics = {}) {
   const bits = [];
@@ -1992,11 +2001,9 @@ function formatAiLabTelemetry(metrics = {}) {
   return bits.length ? bits.join(' \u00b7 ') : '';
 }
 function refreshAiLabTelemetry(metrics = {}) {
-  const row = $('pipAiLabTelemetry');
-  const line = formatAiLabTelemetry(metrics);
-  if (!row || !line) return;
-  row.hidden = false;
-  row.textContent = line;
+  if (metrics.tokensPerSecond != null || metrics.latencyMs != null || metrics.evalCount != null || metrics.telemetry) {
+    updateTelemetryBar(metrics);
+  }
 }
 function aiLabPartRows(msg) {
   if (Array.isArray(msg.parts) && msg.parts.length) {
@@ -2021,21 +2028,40 @@ function aiLabPartRows(msg) {
   }
   return [];
 }
+function setLabTab(mode) {
+  const analysis = mode !== 'raw';
+  $('pipTabFormatted')?.classList.toggle('active', analysis);
+  $('pipTabRaw')?.classList.toggle('active', !analysis);
+  const formatted = $('pipContentFormatted');
+  const raw = $('pipContentRaw');
+  if (analysis) {
+    formatted?.removeAttribute('hidden');
+    raw?.setAttribute('hidden', '');
+  } else {
+    formatted?.setAttribute('hidden', '');
+    raw?.removeAttribute('hidden');
+  }
+}
 function renderAiLabReply(msg) {
   setAiLabLoading(false);
-  const out = $('pipAiLabOutput');
-  if (!out) return;
-  out.hidden = false;
-  out.classList.remove('is-pulsing');
-  out.removeAttribute('aria-busy');
-  out.replaceChildren();
+  const shell = $('pipLabResult');
+  const formatted = $('pipContentFormatted');
+  const rawPre = $('pipContentRaw');
+  if (!shell || !formatted) return;
+  shell.hidden = false;
+  shell.classList.remove('is-pulsing');
+  shell.removeAttribute('aria-busy');
+  formatted.replaceChildren();
   const telemetry = { ...msg.telemetry, ...msg };
-  if (telemetry.tokensPerSecond != null || telemetry.latencyMs != null) updateModelMetrics(telemetry);
+  if (telemetry.tokensPerSecond != null || telemetry.latencyMs != null || telemetry.telemetry) updateModelMetrics(telemetry);
   const headline = msg.headline || msg.explanation?.bottomLine || msg.bottomLine || '';
   const parts = aiLabPartRows(msg);
+  const rawText = msg.rawText || msg.text || '';
+  if (rawPre) rawPre.textContent = rawText;
   if (!headline && !parts.length && msg.text) {
-    out.textContent = msg.text;
+    formatted.textContent = msg.text;
     refreshAiLabTelemetry(telemetry);
+    setLabTab('formatted');
     return;
   }
   const card = document.createElement('article');
@@ -2061,40 +2087,49 @@ function renderAiLabReply(msg) {
     body.appendChild(section);
   }
   card.appendChild(body);
-  out.appendChild(card);
-  const telem = document.createElement('div');
-  telem.id = 'pipAiLabTelemetry';
-  telem.className = 'pip-ai-lab-telemetry';
-  telem.hidden = !formatAiLabTelemetry(telemetry);
-  telem.textContent = formatAiLabTelemetry(telemetry);
-  out.appendChild(telem);
+  formatted.appendChild(card);
+  refreshAiLabTelemetry(telemetry);
+  setLabTab('formatted');
 }
 function setAiLabLoading(active) {
   aiLabPending = active;
-  const out = $('pipAiLabOutput');
-  const submit = $('pipAiLabSubmit');
-  if (submit) submit.disabled = active;
-  const daily = $('pipNextBiteBtn');
-  if (daily) daily.disabled = active;
-  if (!out) return;
+  const shell = $('pipLabResult');
+  const formatted = $('pipContentFormatted');
+  const run = $('pipRunProbeBtn');
+  if (run) run.disabled = active;
+  if (!shell || !formatted) return;
   if (!active) {
-    out.classList.remove('is-pulsing');
-    out.removeAttribute('aria-busy');
+    shell.classList.remove('is-pulsing');
+    shell.removeAttribute('aria-busy');
     return;
   }
-  out.hidden = false;
-  out.classList.add('is-pulsing');
-  out.setAttribute('aria-busy', 'true');
-  out.replaceChildren();
+  shell.hidden = false;
+  shell.classList.add('is-pulsing');
+  shell.setAttribute('aria-busy', 'true');
+  formatted.replaceChildren();
   const pending = document.createElement('p');
   pending.className = 'pip-ai-lab-pending';
-  pending.textContent = 'Exploring with your local model\u2026';
-  const inline = document.createElement('div');
-  inline.id = 'pipAiLabTelemetry';
-  inline.className = 'pip-ai-lab-telemetry';
-  inline.hidden = true;
-  out.append(pending, inline);
-  $('pipModelMetrics')?.removeAttribute('hidden');
+  pending.textContent = 'Running local inference\u2026';
+  formatted.appendChild(pending);
+  if ($('pipContentRaw')) $('pipContentRaw').textContent = '';
+}
+function renderProbeResult(msg) {
+  setAiLabLoading(false);
+  const shell = $('pipLabResult');
+  const formatted = $('pipContentFormatted');
+  const rawPre = $('pipContentRaw');
+  if (!shell || !formatted) return;
+  shell.hidden = false;
+  shell.classList.remove('is-pulsing');
+  shell.removeAttribute('aria-busy');
+  formatted.replaceChildren();
+  const body = document.createElement('div');
+  body.className = 'pip-probe-formatted';
+  fillAiLabPartBody(body, msg.formatted || '', new Set());
+  formatted.appendChild(body);
+  if (rawPre) rawPre.textContent = msg.raw || '';
+  if (msg.telemetry) updateTelemetryBar({ telemetry: msg.telemetry });
+  setLabTab('formatted');
 }
 function submitAiLabQuery(raw) {
   const query = String(raw || '').trim();
@@ -2179,6 +2214,29 @@ on('pipAiFacetSelect', 'change', () => {
 on('pipModelSelector', 'change', () => {
   vscode.postMessage({ type: 'setActiveModel', model: $('pipModelSelector')?.value || '' });
 });
+function syncCustomProbeRow() {
+  const row = $('pipCustomProbeRow');
+  const probe = $('pipProbeSelect')?.value;
+  if (row) row.hidden = probe !== 'custom';
+}
+function runModelProbe() {
+  const probeKey = $('pipProbeSelect')?.value || '';
+  const customPrompt = String($('pipCustomPrompt')?.value || '').trim();
+  if (!probeKey || aiLabPending) return;
+  if (probeKey === 'custom' && !customPrompt) return;
+  setAiLabLoading(true);
+  vscode.postMessage({
+    type: 'runProbe',
+    probeKey,
+    customPrompt,
+    model: $('pipModelSelector')?.value || '',
+  });
+}
+on('pipProbeSelect', 'change', syncCustomProbeRow);
+on('pipRunProbeBtn', 'click', runModelProbe);
+on('pipTabFormatted', 'click', () => setLabTab('formatted'));
+on('pipTabRaw', 'click', () => setLabTab('raw'));
+syncCustomProbeRow();
 function setAiLabOpen(open) {
   const panel = $('pipAiLab');
   const btn = $('aiBtn');
@@ -2187,12 +2245,6 @@ function setAiLabOpen(open) {
     panel.removeAttribute('hidden');
     btn.classList.add('pip-btn-active');
     btn.setAttribute('aria-expanded', 'true');
-    const input = $('pipAiLabInput');
-    if (input) {
-      const focus = () => { if (typeof input.focus === 'function') input.focus(); };
-      if (typeof requestAnimationFrame === 'function') requestAnimationFrame(focus);
-      else focus();
-    }
   } else {
     panel.setAttribute('hidden', '');
     btn.classList.remove('pip-btn-active');
@@ -2249,7 +2301,7 @@ function refreshTimerSound() {
   button.title = label;
   button.setAttribute('aria-label', 'Voice');
   button.setAttribute('aria-pressed', String(!timerSoundEnabled));
-  button.textContent = timerSoundEnabled ? '\uD83D\uDD0A' : '\uD83D\uDD07';
+  button.textContent = timerSoundEnabled ? 'Mute' : 'Unmute';
   button.classList.toggle('soundMuted', !timerSoundEnabled);
 }
 function prepareTimerAudio() {
@@ -2263,6 +2315,7 @@ function prepareTimerAudio() {
 }
 function finishTimebox() {
   const output = $('timerOut');
+  if (!output) return;
   output.textContent = 'Timebox complete';
   output.classList.add('timeboxComplete');
   clearTimeout(timerPulse);
@@ -2314,14 +2367,15 @@ on('pipStartBtn', 'click', () => {
     return;
   }
   clearTimeout(timerPulse);
-  $('timerOut').classList.remove('timeboxComplete');
+  $('timerOut')?.classList.remove('timeboxComplete');
   prepareTimerAudio();
   remaining = Math.min(60, Math.max(1, Number($('pipTimeboxInput')?.value) || 10)) * 60;
   if (start) {
     start.textContent = 'Stop';
     start.title = 'Stop the current timebox.';
   }
-  $('timerOut').textContent = `${Math.ceil(remaining / 60)}:00 left`;
+  const countdown = $('timerOut');
+  if (countdown) countdown.textContent = `${Math.ceil(remaining / 60)}:00 left`;
   timer = setInterval(() => {
     remaining -= 1;
     if (remaining <= 0) {
@@ -2336,7 +2390,7 @@ on('pipStartBtn', 'click', () => {
     }
     const minutes = Math.floor(remaining / 60);
     const seconds = String(remaining % 60).padStart(2, '0');
-    $('timerOut').textContent = `${minutes}:${seconds} left`;
+    if (countdown) countdown.textContent = `${minutes}:${seconds} left`;
   }, 1000);
 });
 

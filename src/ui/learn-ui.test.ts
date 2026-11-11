@@ -327,6 +327,7 @@ describe('focused controls and feedback', () => {
 
   it('renders collapsible knowledge-check details in AI Lab replies', () => {
     const ui = webview();
+    ui.get('pipLabResult')?.removeAttribute('hidden');
     ui.message({
       type: 'aiLabReply',
       headline: 'Temperature redistributes probability.',
@@ -337,7 +338,7 @@ describe('focused controls and feedback', () => {
         },
       ],
     });
-    const out = ui.get('pipAiLabOutput');
+    const out = ui.get('pipContentFormatted');
     const details = descendants(out).find((node) => node.tagName === 'details');
     expect(details).toBeTruthy();
     expect(details?.className).toBe('pip-ai-lab-kc');

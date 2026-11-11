@@ -1,22 +1,47 @@
-import { assertLocalhost, type ChatMessage, type ModelProvider, type ProviderResult } from '../shared/types';
+import {
+  assertLocalhost,
+  type ChatMessage,
+  type ModelProvider,
+  type ProviderResult,
+  type ProviderTelemetry,
+} from '../shared/types';
 
-type OllamaEvalPayload = {
+type OllamaTimingPayload = {
+  total_duration?: number;
+  load_duration?: number;
+  prompt_eval_count?: number;
+  prompt_eval_duration?: number;
   eval_count?: number;
   eval_duration?: number;
 };
 
+function ollamaTelemetry(data: OllamaTimingPayload): ProviderTelemetry {
+  const evalCount = data.eval_count ?? 0;
+  const evalDuration = data.eval_duration;
+  return {
+    totalDurationMs: (data.total_duration ?? 0) / 1e6,
+    loadDurationMs: (data.load_duration ?? 0) / 1e6,
+    promptEvalCount: data.prompt_eval_count ?? 0,
+    promptEvalDurationMs: (data.prompt_eval_duration ?? 0) / 1e6,
+    evalCount,
+    evalDurationMs: (evalDuration ?? 0) / 1e6,
+    tokensPerSecond: evalDuration ? evalCount / (evalDuration / 1e9) : 0,
+  };
+}
+
 function providerInferenceMetrics(
   started: number,
-  stats: OllamaEvalPayload,
-): Pick<ProviderResult, 'latencyMs' | 'evalCount' | 'evalDuration' | 'tokensPerSecond'> {
+  stats: OllamaTimingPayload,
+): Pick<ProviderResult, 'latencyMs' | 'evalCount' | 'evalDuration' | 'tokensPerSecond' | 'telemetry'> {
   const latencyMs = Date.now() - started;
   const evalCount = stats.eval_count;
   const evalDuration = stats.eval_duration;
+  const telemetry = ollamaTelemetry(stats);
   let tokensPerSecond: number | undefined;
   if (evalCount != null && evalDuration != null && evalDuration > 0) {
-    tokensPerSecond = evalCount / (evalDuration / 1e9);
+    tokensPerSecond = telemetry.tokensPerSecond;
   }
-  return { latencyMs, evalCount, evalDuration, tokensPerSecond };
+  return { latencyMs, evalCount, evalDuration, tokensPerSecond, telemetry };
 }
 
 /** Talks to a local Ollama server. Enforces localhost — nothing leaves this machine. */
@@ -69,12 +94,13 @@ export class OllamaProvider implements ModelProvider {
     if (!res.ok) {
       throw new Error(`Ollama returned ${res.status}`);
     }
-    const data = (await res.json()) as { message?: { content?: string } } & OllamaEvalPayload;
-    const text = data.message?.content?.trim() ?? '';
+    const data = (await res.json()) as { message?: { content?: string } } & OllamaTimingPayload;
+    const rawText = data.message?.content ?? '';
+    const text = rawText.trim();
     if (!text) {
       throw new Error('Ollama returned an empty response');
     }
-    return { text, model, fromMock: false, ...providerInferenceMetrics(started, data) };
+    return { text, rawText, model, fromMock: false, ...providerInferenceMetrics(started, data) };
   }
 
   /** Streaming variant: onText receives the accumulated text as tokens arrive. */
@@ -106,7 +132,7 @@ export class OllamaProvider implements ModelProvider {
     const decoder = new TextDecoder();
     let buffer = '';
     let accumulated = '';
-    let streamEval: OllamaEvalPayload = {};
+    let streamTiming: OllamaTimingPayload = {};
     for (;;) {
       const { done, value } = await reader.read();
       if (done) {
@@ -120,16 +146,28 @@ export class OllamaProvider implements ModelProvider {
           continue;
         }
         try {
-          const parsed = JSON.parse(line) as { message?: { content?: string }; done?: boolean } & OllamaEvalPayload;
+          const parsed = JSON.parse(line) as { message?: { content?: string }; done?: boolean } & OllamaTimingPayload;
           const piece = parsed.message?.content ?? '';
           if (piece) {
             accumulated += piece;
             onText(accumulated);
           }
-          if (parsed.done || parsed.eval_count != null || parsed.eval_duration != null) {
-            streamEval = {
-              eval_count: parsed.eval_count ?? streamEval.eval_count,
-              eval_duration: parsed.eval_duration ?? streamEval.eval_duration,
+          if (
+            parsed.done
+            || parsed.total_duration != null
+            || parsed.load_duration != null
+            || parsed.prompt_eval_count != null
+            || parsed.prompt_eval_duration != null
+            || parsed.eval_count != null
+            || parsed.eval_duration != null
+          ) {
+            streamTiming = {
+              total_duration: parsed.total_duration ?? streamTiming.total_duration,
+              load_duration: parsed.load_duration ?? streamTiming.load_duration,
+              prompt_eval_count: parsed.prompt_eval_count ?? streamTiming.prompt_eval_count,
+              prompt_eval_duration: parsed.prompt_eval_duration ?? streamTiming.prompt_eval_duration,
+              eval_count: parsed.eval_count ?? streamTiming.eval_count,
+              eval_duration: parsed.eval_duration ?? streamTiming.eval_duration,
             };
           }
         } catch {
@@ -140,7 +178,14 @@ export class OllamaProvider implements ModelProvider {
     if (!accumulated.trim()) {
       throw new Error('Ollama streamed an empty response');
     }
-    return { text: accumulated.trim(), model, fromMock: false, ...providerInferenceMetrics(started, streamEval) };
+    const rawText = accumulated;
+    return {
+      text: rawText.trim(),
+      rawText,
+      model,
+      fromMock: false,
+      ...providerInferenceMetrics(started, streamTiming),
+    };
   }
 }
 

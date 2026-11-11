@@ -77,6 +77,7 @@ import {
   drillPrompt,
   duckPrompt,
   aiLabPrompt,
+  empiricalProbePrompt,
   explainPrompt,
   improveCodebasePrompt,
   verifierPrompt,
@@ -177,6 +178,7 @@ const TOKEN_CAPS: Record<string, number> = {
   solver: 380,
   deep: 340,
   aiLab: 520,
+  probe: 640,
   diverge: 220,
   converge: 120,
   scamper: 200,
@@ -756,6 +758,57 @@ export function activate(context: vscode.ExtensionContext): void {
           const models = await provider.getInstalledModels();
           const selected = String(message['model'] ?? '').trim() || config.get<string>('pip.model', 'qwen2.5-coder:3b');
           transport.post({ type: 'availableModels', models, selected });
+          break;
+        }
+        case 'runProbe': {
+          const probeKey = String(message['probeKey'] ?? '').trim();
+          const customPrompt = String(message['customPrompt'] ?? '').trim();
+          const config = vscode.workspace.getConfiguration();
+          const requested = String(message['model'] ?? '').trim();
+          const model = requested || config.get<string>('pip.model', 'qwen2.5-coder:3b');
+          if (probeKey === 'custom' && !customPrompt) {
+            transport.post({
+              type: 'probeResult',
+              formatted: 'Enter a custom prompt first.',
+              raw: '',
+              telemetry: undefined,
+            });
+            break;
+          }
+          const ctx = codeContext ?? contextForSolve() ?? null;
+          const messages = empiricalProbePrompt(probeKey, customPrompt, model, ctx);
+          try {
+            const provider = new OllamaProvider(config.get<string>('pip.ollamaUrl', 'http://127.0.0.1:11434'));
+            let result: ProviderResult;
+            try {
+              result = await provider.chat(messages, model, TOKEN_CAPS.probe);
+            } catch {
+              result = await new MockProvider().chat(messages, model);
+            }
+            await store.addStat({
+              worker: 'probe',
+              model: result.model,
+              latencyMs: result.latencyMs ?? 0,
+              estTokens: estimateTokens(result.text),
+              costUsd: 0,
+              fromMock: result.fromMock,
+              at: Date.now(),
+            });
+            transport.post({
+              type: 'probeResult',
+              formatted: result.text,
+              raw: result.rawText ?? result.text,
+              telemetry: result.telemetry,
+            });
+            transport.post(statLine({ ...result, latencyMs: result.latencyMs ?? 0 }, 'probe'));
+          } catch (error) {
+            transport.post({
+              type: 'probeResult',
+              formatted: error instanceof Error ? error.message : 'Probe failed.',
+              raw: '',
+              telemetry: undefined,
+            });
+          }
           break;
         }
         case 'setActiveModel': {

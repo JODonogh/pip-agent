@@ -18,7 +18,6 @@ const CONTROL_HELP: Record<string, string> = {
   markBtn: 'Keep this idea in Review so you can practise recalling it later.',
   aiBtn: 'Open or close the AI Lab micro-lesson studio.',
   pipAiLabCloseBtn: 'Collapse the AI Lab drawer.',
-  pipReadBtn: 'Read the current explanation aloud; click again to stop.',
   pipStartBtn: 'Start or stop a timebox for this session.',
   pipMuteBtn: 'Mute or unmute timebox completion and voice feedback sounds.',
   pipMusicBtn: 'Toggle gentle ambient focus audio during the session.',
@@ -74,7 +73,7 @@ function withControlHelp(markup: string): string {
     if (tag === 'button') {
       // Only icon-only buttons need a tooltip; a visible text label already says what the button does.
       const visible = body.replace(/<[^>]*>/g, '').replace(/&[#\w]+;/g, '');
-      if (!/class="[^"]*(?:iconBtn|pip-icon-btn)/.test(attrs) && /[A-Za-z]/.test(visible)) return `<button${attrs.replace(/\s*\btitle="[^"]*"/, '')}>${body}</button>`;
+      if (/[A-Za-z]/.test(visible)) return `<button${attrs.replace(/\s*\btitle="[^"]*"/, '')}>${body}</button>`;
     }
     if (/\btitle=/.test(attrs)) {
       const title = /\btitle="([^"]+)"/.exec(attrs)?.[1] || '';
@@ -103,56 +102,58 @@ export const LEARN_BODY = withControlHelp(`
     </div>
     <div class="pip-toolbar-row">
       <span class="pip-toolbar-label">Timebox</span>
-      <input type="number" id="pipTimeboxInput" class="pip-input-compact" value="10" min="1" max="60" aria-label="Minutes" title="Minutes (session only, never saved)">
+      <input type="number" id="pipTimeboxInput" class="pip-input-compact" value="10" min="1" max="60" aria-label="Minutes" />
       <button id="pipStartBtn" class="pip-btn pip-btn-sm" type="button">Start</button>
       <span id="timerOut" class="pip-toolbar-status muted" role="status" aria-live="polite"></span>
       <div class="pip-toolbar-actions">
-        <button id="pipReadBtn" class="pip-icon-btn" type="button" title="Read aloud (TTS)" aria-label="Read aloud">&#128266;</button>
-        <button id="pipMuteBtn" class="pip-icon-btn" type="button" title="Mute/Unmute voice feedback" aria-label="Voice" aria-pressed="false">&#128265;</button>
-        <button id="pipMusicBtn" class="pip-icon-btn" type="button" title="Ambient focus audio" aria-label="Audio" aria-pressed="false">&#127925;</button>
-        <button id="pipResetBtn" class="pip-icon-btn" type="button" title="Reset session" aria-label="Reset">&#8635;</button>
+        <button id="pipMuteBtn" class="pip-icon-btn" type="button" aria-label="Voice">Mute</button>
+        <button id="pipMusicBtn" class="pip-icon-btn" type="button" aria-label="Audio">Audio</button>
+        <button id="pipResetBtn" class="pip-icon-btn" type="button" aria-label="Reset">Reset</button>
       </div>
     </div>
   </section>
 
   <div class="pip-ai-lab-container" id="pipAiLab" hidden>
     <div class="pip-ai-lab-header">
-      <span class="pip-ai-lab-title">&#129514; AI Lab &middot; Duolingo-Style Micro-Lessons</span>
-      <div class="pip-ai-lab-header-actions">
+      <span class="pip-ai-lab-title">Model Observability &amp; Architecture Lab</span>
+      <div class="pip-ai-lab-controls">
         <select id="pipModelSelector" class="pip-select-compact" title="Active Model">
-          <option value="qwen2.5-coder:14b">Loading models&hellip;</option>
+          <option value="">Loading models...</option>
         </select>
-        <button id="pipAiLabCloseBtn" class="pip-icon-btn" type="button" title="Collapse AI Lab" aria-label="Collapse AI Lab">&#8963;</button>
-      </div>
-      <div id="pipModelMetrics" class="pip-metrics-bar" hidden>
-        <span id="pipMetricTps">-- tok/s</span> &middot; <span id="pipMetricLatency">-- ms</span>
+        <button id="pipAiLabCloseBtn" class="pip-btn pip-btn-sm" type="button">Collapse</button>
       </div>
     </div>
 
-    <div class="pip-curriculum-bar">
-      <button id="pipNextBiteBtn" type="button" class="pip-btn pip-btn-accent">&#127922; Next Bite</button>
-      <label class="pip-sr-only" for="pipAiFacetSelect">Curriculum facet</label>
-      <select id="pipAiFacetSelect" class="pip-select-compact" title="Filter bites by AI topic">
-        <option value="all">&#127760; All Facets</option>
-        <option value="history">&#127963;&#65039; History &amp; Breakthroughs</option>
-        <option value="architecture">&#129504; Architectures &amp; Attention</option>
-        <option value="learning">&#127919; Reinforcement &amp; Learning</option>
-        <option value="inference">&#9889; Inference &amp; Compute</option>
-        <option value="alignment">&#128737;&#65039; Alignment &amp; Cognition</option>
+    <div id="pipTelemetryBar" class="pip-telemetry-bar">
+      <div class="pip-stat"><span class="pip-stat-label">Throughput:</span> <span id="pipStatTps">-- tok/s</span></div>
+      <div class="pip-stat"><span class="pip-stat-label">Latency:</span> <span id="pipStatLatency">-- ms</span></div>
+      <div class="pip-stat"><span class="pip-stat-label">Eval Tokens:</span> <span id="pipStatTokens">--</span></div>
+      <div class="pip-stat"><span class="pip-stat-label">Prompt Tokens:</span> <span id="pipStatPrompt">--</span></div>
+    </div>
+
+    <div class="pip-probe-row">
+      <select id="pipProbeSelect" class="pip-select">
+        <option value="scale_negative">Parameter Scaling: Negative Constraint Leaks (1.5B vs 14B)</option>
+        <option value="test_time_compute">Test-Time Compute: Raw Reasoning Trace</option>
+        <option value="synthetic_vs_web">Pre-Training Bias: Synthetic (Phi-4) vs Web Scrape (Llama 3.1)</option>
+        <option value="attention_temperature">Sampling Entropy: Temperature &amp; Top-P on AST Stability</option>
+        <option value="custom">Custom Probe</option>
       </select>
+      <button id="pipRunProbeBtn" class="pip-btn pip-btn-accent" type="button">Run Probe</button>
     </div>
 
-    <div class="pip-ai-lab-input-row">
-      <input
-        type="text"
-        id="pipAiLabInput"
-        class="pip-input"
-        placeholder="Ask any AI concept, history, or PIP hack&hellip;"
-      />
-      <button id="pipAiLabSubmit" type="button" class="pip-btn pip-btn-primary">Learn</button>
+    <div class="pip-custom-probe-row" id="pipCustomProbeRow" hidden>
+      <textarea id="pipCustomPrompt" class="pip-textarea" rows="2" placeholder="Custom test prompt to evaluate model behavior..."></textarea>
     </div>
 
-    <div id="pipAiLabOutput" class="pip-ai-lab-output" hidden></div>
+    <div id="pipLabResult" class="pip-lab-result" hidden>
+      <div class="pip-tab-bar">
+        <button id="pipTabFormatted" class="pip-tab active" type="button">Analysis</button>
+        <button id="pipTabRaw" class="pip-tab" type="button">Raw Output &amp; Reasoning Tokens</button>
+      </div>
+      <div id="pipContentFormatted" class="pip-tab-content"></div>
+      <pre id="pipContentRaw" class="pip-tab-content" hidden></pre>
+    </div>
   </div>
 
   <nav class="a2uiBar" role="tablist" aria-label="Workspace mode">

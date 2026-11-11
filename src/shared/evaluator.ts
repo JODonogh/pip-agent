@@ -1,4 +1,4 @@
-import { logEvaluatorDiagnostic } from '../platform/diagnostics';
+import { appendEvaluatorDiagnosticNote, logEvaluatorDrop } from '../platform/diagnostics';
 import type { CodeContext, Explanation } from './types';
 
 const CHUNK_WORD_CAP = 60;
@@ -51,15 +51,16 @@ export function evaluateExplanation(raw: string): Explanation {
   flush();
 
   if (!bottomLine) {
-    logEvaluatorDiagnostic(
-      'evaluateExplanation',
-      'Missing BOTTOM_LINE in model output; placeholder applied',
-      raw.slice(0, 400).replace(/\s+/g, ' '),
+    const draft = chunks[0]
+      ? `${chunks[0].title}: ${chunks[0].body}`.trim()
+      : raw.trim().split('\n').map((line) => line.trim()).find(Boolean) ?? '';
+    logEvaluatorDrop('Missing BOTTOM_LINE in model output', raw);
+    bottomLine = appendEvaluatorDiagnosticNote(
+      draft || 'The model did not lead with a bottom line.',
+      'Missing BOTTOM_LINE in model output',
     );
-    bottomLine = 'The model did not lead with a bottom line — open a chunk below.';
     repaired = true;
-  }
-  if (countSentences(bottomLine) > 1) {
+  } else if (countSentences(bottomLine) > 1) {
     bottomLine = `${bottomLine.split(/(?<=[.!?])\s/)[0] ?? bottomLine}`;
     repaired = true;
   }

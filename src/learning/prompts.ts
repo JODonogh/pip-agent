@@ -295,6 +295,87 @@ export function drillPrompt(concept: Concept): ChatMessage[] {
 }
 
 /** Duolingo / Brilliant micro-card for the AI Lab — four fixed sections plus a knowledge check. */
+const EMPIRICAL_PROBE_SECTIONS =
+  'Format your answer with exactly these two markdown sections:\n' +
+  '### Mechanism Observed\n' +
+  '### 15-Minute PIP Experiment\n';
+
+const TEST_TIME_DEFAULT_USER =
+  'Two async tasks both read a shared counter, increment it, and write it back without synchronisation. ' +
+  'Walk through an interleaving where the final counter is lower than expected, then prove when a mutex fixes the outcome.\n';
+
+/** Empirical probes for the Model Observability lab — each probe stresses a different failure mode. */
+export function empiricalProbePrompt(
+  probeKey: string,
+  customPrompt: string,
+  modelName: string,
+  ctx?: CodeContext | null,
+): ChatMessage[] {
+  const excerpt = ctx ? codeBlock(ctx) : 'No editor code supplied.';
+  const modelLine = `Model under test: ${modelName}\n`;
+
+  switch (probeKey) {
+    case 'scale_negative':
+      return [
+        {
+          role: 'system',
+          content:
+            "Explain the code. Strict negative constraint: you must NEVER use the words 'database', 'query', 'SQL', 'table', or 'row'.\n" +
+            EMPIRICAL_PROBE_SECTIONS,
+        },
+        { role: 'user', content: `${modelLine}${excerpt}` },
+      ];
+    case 'test_time_compute':
+      return [
+        {
+          role: 'system',
+          content:
+            'Solve this algorithmic edge case puzzle step-by-step. Prove correctness before concluding.\n' +
+            EMPIRICAL_PROBE_SECTIONS,
+        },
+        {
+          role: 'user',
+          content: `${modelLine}${ctx ? excerpt : TEST_TIME_DEFAULT_USER}`,
+        },
+      ];
+    case 'synthetic_vs_web':
+      return [
+        {
+          role: 'system',
+          content:
+            'Evaluate this code strictly against formal language specifications and contract semantics.\n' +
+            EMPIRICAL_PROBE_SECTIONS,
+        },
+        { role: 'user', content: `${modelLine}${excerpt}` },
+      ];
+    case 'attention_temperature':
+      return [
+        {
+          role: 'system',
+          content:
+            'Generate an AST and component boundary breakdown for this code.\n' +
+            EMPIRICAL_PROBE_SECTIONS,
+        },
+        { role: 'user', content: `${modelLine}${excerpt}` },
+      ];
+    case 'custom':
+      return [
+        {
+          role: 'user',
+          content: [customPrompt.trim(), ctx ? excerpt : ''].filter(Boolean).join('\n\n'),
+        },
+      ];
+    default:
+      return [
+        {
+          role: 'system',
+          content: EMPIRICAL_PROBE_SECTIONS,
+        },
+        { role: 'user', content: `${modelLine}${excerpt}` },
+      ];
+  }
+}
+
 export function aiLabPrompt(
   query: string,
   facet: string,
