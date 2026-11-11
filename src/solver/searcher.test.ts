@@ -14,6 +14,27 @@ describe('searcher', () => {
     expect(skipRepoSearchForAnswer('What is 1NF?', 'CREATE TABLE t (id INT);')).toBe(false);
   });
 
+  it('skips repo search for conceptual questions about an anchored reducer snippet', () => {
+    const reducer = [
+      'return {',
+      '  ...prev,',
+      '  search: nextSearch ? nextSearch : undefined,',
+      '  productId: updates.productId !== undefined ? updates.productId : prev.productId,',
+      '};',
+    ].join('\n');
+    expect(skipRepoSearchForAnswer('Why is it important to use undefined here?', reducer)).toBe(true);
+    expect(skipRepoSearchForAnswer('What does findFilteredInScope do?', reducer)).toBe(false);
+  });
+
+  it('skips repo search when the question embeds inline code in backticks', () => {
+    expect(
+      skipRepoSearchForAnswer(
+        'Why is it important to write `search: nextSearch ? nextSearch : undefined`?',
+        '',
+      ),
+    ).toBe(true);
+  });
+
   it('prefers code-shaped names over plain words', () => {
     const terms = searchTerms('Why does findFilteredInScope return nothing please', 'partnerService.findFilteredInScope(criteria)');
     expect(terms[0]).toBe('findFilteredInScope');
@@ -57,6 +78,13 @@ describe('chat helpers', () => {
     const prompt = chatPrompt('answer', 'What is First Normal Form?', [], 'excerpt', 'hits', [], '', { conceptualAnswer: true });
     expect(prompt[0]!.content).toContain('did not search the repository');
     expect(prompt[1]!.content).toContain('no repository search — conceptual question only');
+  });
+
+  it('grounds procedural answer steps in the anchored excerpt, not a fixed stack', () => {
+    const system = chatPrompt('answer', 'how to verify?', [], 'const x = 1;', 'hits', ['x'])[0]!.content;
+    expect(system).not.toMatch(/MockMvcResultHandlers/i);
+    expect(system).not.toMatch(/\bjsonPath\b/i);
+    expect(system).toContain('anchored excerpt');
   });
 });
 

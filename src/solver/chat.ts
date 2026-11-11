@@ -23,7 +23,7 @@ const MODES: Record<ChatMode, string> = {
   answer:
     'Answer ONLY the engineer\'s latest message. Use conversation history for context, but do not re-state the whole root-cause analysis unless they ask for it again. ' +
     'If they ask how to run a check, inspect something, or follow a Pair suggestion ("how do I…", "how do you…", "how to…"), teach the procedure: ' +
-    '(1) one sentence what you are trying to learn, (2) 2–4 concrete steps with tool names (breakpoint, MockMvcResultHandlers.print(), getContentAsString(), jsonPath, read @BeforeEach / test body), ' +
+    '(1) one sentence what you are trying to learn, (2) 2–4 concrete steps using tools that match the language and stack in the anchored excerpt (debugger, test runner, REPL, logs, or framework APIs named in that excerpt — never invent stack-specific tooling that does not appear in the excerpt or question), ' +
     '(3) one sentence what result would mean. Cite file:line when pointing at repo code. ' +
     'If they ask a yes/no or factual question, answer it directly first — do not pivot to fixing the test or to unrelated repo topics. ' +
     'Under 150 words unless the question is purely conceptual (definitions, normal forms, theory), in which case stay under 120 words. ' +

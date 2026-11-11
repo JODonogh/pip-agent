@@ -391,13 +391,13 @@ describe('natural voices & ideation parsers', () => {
     ]);
     expect(voices[0]?.label).toBe('Tara · premium');
   });
-  it('treats a feature summary as not history, and useState as the 2018 hooks proposal', () => {
+  it('treats a feature summary as not history, and does not hijack useState with a hooks origin template', () => {
     const summary =
       'This code snippet introduces a dynamic error banner that adjusts its content based on the number of errors, providing users with a clear and actionable interface for viewing all errors or hiding them.';
     expect(looksLikeHistory(summary)).toBe(false);
     const story = rootsForSelection('const [open, setOpen] = useState(false);\nreturn null;');
-    expect(story.bottomLine).toMatch(/2018/);
-    expect(story.bottomLine).toMatch(/Alpert/);
+    expect(story.bottomLine).not.toMatch(/2018/);
+    expect(story.bottomLine).not.toMatch(/Alpert|Markbåge/i);
     expect(story.bottomLine.toLowerCase()).not.toContain('error banner');
   });
   it('parses codebase improvement cards and POC ideation cards', () => {

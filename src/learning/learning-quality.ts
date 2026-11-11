@@ -1,8 +1,6 @@
 import { appendEvaluatorDiagnosticNote, logEvaluatorDiagnostic, logEvaluatorDrop, markExperimentalDraft } from '../platform/diagnostics';
 import { evaluateExplanation } from '../shared/evaluator';
-import { metaphorScaffold } from '../ideation/ideation';
 import { conceptualDbTheoryWithoutSchema } from '../solver/searcher';
-import { ANALOGY_DOMAINS } from './prompts';
 import { parseSql, sqlCostFactors } from '../diagrams/sql';
 import type { CodeContext, Explanation } from '../shared/types';
 
@@ -175,13 +173,6 @@ function likeAnalogyTeaching(): Explanation {
   };
 }
 
-function analogyFallback(ctx: CodeContext): Explanation {
-  if (likeEscaping(ctx)) return likeAnalogyTeaching();
-  const [mapping, exercise] = metaphorScaffold(ctx).split('\n');
-  return { bottomLine: mapping ?? 'Read the code as any number of metaphors, whatever most suits the particular code sample or question given',
-    chunks: [{ title: 'Try the mapping', body: exercise ?? '' }], repaired: true };
-}
-
 /** Learn context is only a theory question (e.g. normal forms) with no table DDL or SQL — skip code templates in every deep section. */
 function conceptualDatabaseTheoryDeep(kind: string): Explanation {
   const normKind = /^trade[- ]?off/i.test(kind) ? 'performance' : kind;
@@ -326,6 +317,19 @@ export function preparedDeep(ctx: CodeContext, kind: string): Explanation | null
   return null;
 }
 
+/** Passes foundations grounding when the model names a mechanism, not only a narration of the code. */
+const DEEP_FOUNDATIONS_MECHANISM_VOCAB =
+  /\b(dependency injection|test seam|test double|test isolation|indirection|inversion|contract|invariant|immutab|referential|complexity|algorithm|data structure|linear|logarith|recurs|hash|queue|stack|tree|closure|polymorph|encapsulat|concurren|atomic|transaction|serializ|ownership|event loop|idempoten|separation of concerns|subquery|semi-join|predicate|relational|query plan|index|three-valued|set-based|declarative|debounc|throttl|schedul|macrotask|microtask|timer|coalesc|unmount|leak|cleanup|async|asynchronous|lexical scope|higher-?order|stale closure|stale state|memoiz|downstream|effect|callback|settimeout|setinterval|requestanimationframe|trailing|leading)\w*/i;
+
+const DEEP_FOUNDATIONS_TRANSFER_VOCAB =
+  /\b(try|recognis|recogniz|apply|ask|check|contrast|compare|exercise|look for|use this|elsewhere|counterexample|inspect|measure|verify|cleanup|clear)\w*/i;
+
+const DEEP_PERFORMANCE_BENEFIT_VOCAB =
+  /\b(benefit|buys|clarity|readab|isolation|fidelity|saves|reduces|coalesc|fewer|throttl|debounc|downstream|less work)\w*/i;
+
+const DEEP_PERFORMANCE_COST_VOCAB =
+  /\b(cost|but|however|allocation|memory|latency|complexity|overhead|risk|leak|unmount|stale|closure|rerender|layout|paint|churn|timer|macrotask|microtask)\w*/i;
+
 export function evaluateDeep(raw: string, ctx: CodeContext, kind: string): Explanation {
   const prepared = preparedDeep(ctx, kind);
   if (prepared) return prepared;
@@ -333,27 +337,28 @@ export function evaluateDeep(raw: string, ctx: CodeContext, kind: string): Expla
   const text = [parsed.bottomLine, ...parsed.chunks.map((chunk) => chunk.body)].join(' ');
   const codeDump = [...raw.matchAll(/```[^\n]*\n([\s\S]*?)```/g)].some((match) => (match[1]?.trim().length ?? 0) > 120);
   if (kind === 'foundations' && (codeDump ||
-      !/\b(dependency injection|test seam|test double|test isolation|indirection|inversion|contract|invariant|immutab|referential|complexity|algorithm|data structure|linear|logarith|recurs|hash|queue|stack|tree|closure|polymorph|encapsulat|concurren|atomic|transaction|serializ|ownership|event loop|idempoten|separation of concerns|subquery|semi-join|predicate|relational|query plan|index|three-valued|set-based|declarative)\w*/i.test(text) ||
-      !/\b(try|recognis|recogniz|apply|ask|check|contrast|compare|exercise|look for|use this|elsewhere|counterexample)\w*/i.test(text))) {
+      !DEEP_FOUNDATIONS_MECHANISM_VOCAB.test(text) ||
+      !DEEP_FOUNDATIONS_TRANSFER_VOCAB.test(text))) {
     const reason = codeDump
       ? 'foundations guard: model returned a code dump instead of a principle lesson'
       : 'foundations guard: missing transferable CS/design/testing vocabulary or transfer exercise';
     return markExperimentalDraft(parsed, 'foundations-grounding', reason, raw);
   }
-  if (kind === 'analogy' && (!(ANALOGY_DOMAINS.some((domain) => domain.words.test(text)) || /\b(stencil|library|kitchen|cook|book|mail|rail|desk|gate|recipe|sieve|assembly|post|theatre|stage|factory|prop|courier)\w*/i.test(text)) ||
-      !/\b(like|analogy|treat|think of|picture|imagine|maps?|represents?|corresponds?|as if)\b/i.test(text) ||
-      !/\b(limit|unlike|does not|doesn't|cannot|breaks down|only illustrates)\b/i.test(text))) {
+  if (kind === 'analogy' && (
+    !/\b(like|analogy|treat|think of|picture|imagine|maps?|represents?|corresponds?|as if)\b/i.test(text) ||
+    !/\b(limit|unlike|does not|doesn't|cannot|breaks down|only illustrates|does not explain|stops at|not the same as)\b/i.test(text)
+  )) {
     return markExperimentalDraft(
       parsed,
       'analogy-grounding',
-      'analogy guard: missing domain mapping, hedge language, or explicit limit',
+      'analogy guard: missing metaphor mapping or explicit limit',
       raw,
     );
   }
   if (/trade[- ]?off|performance/i.test(kind) && (
-    !/\b(benefit|buys|clarity|readab|isolation|fidelity|saves|reduces)\w*/i.test(text) ||
-    !/\b(cost|but|however|allocation|memory|latency|complexity|overhead|risk)\w*/i.test(text) ||
-    !/\b(when|if|unless|prefer|choose|measure|benchmark|unit|integration)\w*/i.test(text))) {
+    !DEEP_PERFORMANCE_BENEFIT_VOCAB.test(text) ||
+    !DEEP_PERFORMANCE_COST_VOCAB.test(text) ||
+    !/\b(when|if|unless|prefer|choose|measure|benchmark|unit|integration|unmount|cleanup|coalesc)\w*/i.test(text))) {
     return markExperimentalDraft(
       parsed,
       'performance-tradeoff-grounding',

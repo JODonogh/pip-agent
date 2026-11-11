@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateDeep, evaluateLearningReview, glossaryDefinition, guardExplanation, readableMath } from './learning-quality';
-import { deepPrompt, learningReviewPrompt, popupPrompt } from './prompts';
+import { deepPrompt, learningReviewPrompt, popupPrompt, selectionDeepCue } from './prompts';
 import type { CodeContext, Explanation } from '../shared/types';
 
 const ctx: CodeContext = {
@@ -91,6 +91,26 @@ For n=8: Original search example\%_ and escaped search example\\%\\_.`, ctx, 'fo
     expect(promptText(deepPrompt(ctx, 'foundations'))).toContain('not LaTeX');
     expect(promptText(deepPrompt(ctx, 'analogy'))).toContain('stretchable holes');
     expect(promptText(deepPrompt(ctx, 'Trade-off: Performance'))).toContain('### Cost');
+  });
+
+  it('steers deep dives at debouncing and custom hooks instead of a hooks origin template', () => {
+    const hookCtx = {
+      ...ctx,
+      selection: 'export function useDebouncedValue<T>(value: T, ms: number) {\n  const [v, setV] = useState(value);\n  useEffect(() => {\n    const id = setTimeout(() => setV(value), ms);\n    return () => clearTimeout(id);\n  }, [value, ms]);\n  return v;\n}',
+    };
+    const cue = selectionDeepCue(hookCtx.selection);
+    expect(cue).toContain('Debouncing');
+    expect(cue).toContain('React Hooks RFC');
+    const roots = promptText(deepPrompt(hookCtx, 'roots'));
+    expect(roots).toContain('contact bounce');
+    expect(roots).toContain('Pattern focus');
+    const foundations = promptText(deepPrompt(hookCtx, 'foundations'));
+    expect(foundations.toLowerCase()).toContain('trailing-edge debounce');
+    expect(foundations.toLowerCase()).toContain('macrotask');
+    const perf = promptText(deepPrompt(hookCtx, 'Trade-off: Performance'));
+    expect(perf).toContain('downstream work');
+    expect(perf).toContain('Allocation');
+    expect(perf).toContain('unmount');
   });
 });
 
@@ -210,6 +230,23 @@ it('declines a generic Foundations response that only echoes the selected functi
   expect(response.experimentalDraft).toBe(true);
 });
 
+it('accepts async debounce foundations without marking them experimental', () => {
+  const context = {
+    file: 'useDebouncedValue.ts', line: 1, language: 'typescript',
+    selection: 'useEffect(() => { const id = setTimeout(() => setV(value), ms); return () => clearTimeout(id); }, [value, ms]);',
+    surrounding: '',
+  };
+  const response = evaluateDeep(
+    'BOTTOM_LINE: Trailing-edge debounce coalesces bursts through macrotask scheduling.\n' +
+      '### Event loop\nsetTimeout queues a timer; cleanup on unmount clears the handle so a stale closure cannot leak work after the component unmounts.\n' +
+      'Compare firing on every keystroke versus after a quiet window.',
+    context,
+    'foundations',
+  );
+  expect(response.bottomLine).not.toContain('[Diagnostic Note: Evaluator check failed:');
+  expect(response.experimentalDraft).not.toBe(true);
+});
+
 it('preserves a generic foundation with a defined principle and a transfer exercise', () => {
   const context = { file: 'example.ts', line: 1, language: 'typescript', selection: 'export const double = (n: number) => n * 2;', surrounding: '' };
   const response = evaluateDeep('BOTTOM_LINE: Referential transparency means an expression can be replaced by its value without changing behaviour.\n### The same input\nThe arithmetic expression has no visible state dependency. Try replacing double(3) with 6 in a caller and compare the result.', context, 'foundations');
@@ -240,7 +277,7 @@ it('repairs the live malformed overview that puts the whole mock fixture into a 
 it('asks for a justified mechanism layer and avoids unsupported hardware speculation', () => {
   const prompt = promptText(deepPrompt(moduleFixture, 'foundations'));
   expect(prompt).toContain('Take one step down');
-  expect(prompt).toContain('Promise/event-loop');
+  expect(prompt).toContain('event-loop');
   expect(prompt).toContain('inspectable experiment');
   expect(prompt).toContain('not LaTeX');
 });

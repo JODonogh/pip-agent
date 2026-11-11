@@ -48,10 +48,37 @@ export function conceptualDbTheoryWithoutSchema(ctx: { selection: string; surrou
   return isConceptualDbTheoryQuestion(blob) && !hasSchemaEvidence(blob);
 }
 
-/** True when the question is conceptual DB theory and the anchored excerpt has no schema/SQL to ground — searching the repo only adds noise. */
+/** Inline code in the engineer's message (backticks), not the editor selection. */
+export function hasInlineCodeInQuestion(question: string): boolean {
+  return /`[^`\n]{2,}`/.test(question) || /```[\s\S]+?```/.test(question);
+}
+
+/** Questions about the anchored snippet itself, not "where is symbol X in the repo?". */
+export function isConceptualSnippetQuestion(question: string): boolean {
+  return (
+    /\bwhy\s+is\s+it\s+important\b/i.test(question) ||
+    /\bwhat\s+does\s+this\b/i.test(question) ||
+    /\bwhat\s+does\s+that\b/i.test(question) ||
+    /\bwhy\s+(?:do\s+we\s+|does\s+this\s+)?(?:use|set|return|assign|pass)\b/i.test(question) ||
+    /\bexplain\s+this\b/i.test(question) ||
+    /\bhow\s+does\s+this\s+work\b/i.test(question) ||
+    /\bwhat\s+is\s+the\s+(?:point|purpose)\b/i.test(question) ||
+    /\bin\s+this\s+(?:code|snippet|case|reducer|function|block|pattern)\b/i.test(question)
+  );
+}
+
+/** Non-trivial editor selection or pasted excerpt — enough to answer without grepping productId across the repo. */
+export function hasAnchoredCodeExcerpt(code: string): boolean {
+  const trimmed = code.trim();
+  if (trimmed.length < 20) return false;
+  return /[{;=]|=>|\b(?:return|const|let|function|class|interface)\b/.test(trimmed);
+}
+
+/** True when repo grep would add noise (theory-only DB questions, or conceptual questions about an anchored snippet). */
 export function skipRepoSearchForAnswer(question: string, code: string): boolean {
-  if (!isConceptualDbTheoryQuestion(question)) return false;
-  return !hasSchemaEvidence(code);
+  if (isConceptualDbTheoryQuestion(question) && !hasSchemaEvidence(code)) return true;
+  if (isConceptualSnippetQuestion(question) && (hasInlineCodeInQuestion(question) || hasAnchoredCodeExcerpt(code))) return true;
+  return false;
 }
 
 /** Identifier-like words from the question and the selected code, code-shaped names first. */

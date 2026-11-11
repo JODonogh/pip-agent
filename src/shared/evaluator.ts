@@ -440,25 +440,6 @@ const ROOT_STORIES: readonly RootStory[] = [
     ],
     },
   {
-    test: /\buse(State|Effect|Memo|Callback|Ref|Reducer)\b/,
-    bottomLine:
-      'React Hooks began as a 2018 proposal by Sophie Alpert, Sebastian Markbåge, and Andrew Clark, so a function could remember state without a class.',
-    chunks: [
-      {
-        title: 'The class problem',
-        body: 'Before hooks, state lived on class components and this had to be bound by hand. Function components could not remember anything between renders.',
-      },
-      {
-        title: 'React Conf, October 2018',
-        body: 'Dan Abramov showed the Hooks RFC on stage. useState is the cell that replaced this.state: a value, and a function that sets the next one.',
-      },
-      {
-        title: 'The link',
-        body: 'The value-and-setter pair in this selection is that 2018 design. It is not an idea invented for this file.',
-      },
-    ],
-  },
-  {
     test: /\b(try|catch|throw)\b/,
     bottomLine:
       'Exceptions — a function aborting instead of returning an error code — were set out by John Goodenough in 1975.',

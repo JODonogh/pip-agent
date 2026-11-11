@@ -26,6 +26,49 @@ export function analogyDomain(selection: string): (typeof ANALOGY_DOMAINS)[numbe
   return ANALOGY_DOMAINS[hash % ANALOGY_DOMAINS.length]!;
 }
 
+/** Steer deep dives at the dominant pattern in the selection — not a default React Hooks history. */
+export function selectionDeepCue(selection: string): string {
+  const cues: string[] = [];
+  if (/debounc/i.test(selection)) {
+    cues.push(
+      'Debouncing is the lead pattern: root it in electrical switch contact bounce or coalescing rapid inputs into one action. Do not replace that with the React Hooks RFC.',
+    );
+  }
+  if (/throttl/i.test(selection)) {
+    cues.push(
+      'Throttling is the lead pattern: root it in rate limiting or sampling (at most one action per window). Do not default to framework hook history.',
+    );
+  }
+  if (/\b(setTimeout|setInterval|requestAnimationFrame|clearTimeout|clearInterval)\b/.test(selection)) {
+    cues.push(
+      'Timers and scheduling belong to the event-loop story: when work is queued relative to the call stack (macrotasks, animation frames). Not the 2018 hooks announcement.',
+    );
+  }
+  const customHook = selection.match(/\bfunction\s+(use[A-Z]\w*)/);
+  const builtInHook = /\buse(?:State|Effect|Memo|Callback|Ref|Reducer)\s*\(/.test(selection);
+  if (customHook && (!builtInHook || /debounc|throttl|setTimeout|setInterval/.test(selection))) {
+    cues.push(
+      `Custom hook "${customHook[1]}" is hook-shaped composition: teach closures, stale state, and ref cells. Cite React hook history only if it clarifies the specific API used — not as a generic backstory.`,
+    );
+  }
+  if (builtInHook && !cues.length) {
+    cues.push(
+      'Built-in React hooks are present: if you cite hook history, tie it to the exact API in this snippet (state cell, effect cleanup, memoized callback) — not a generic conference recap.',
+    );
+  }
+  if (/\buseCallback\b/.test(selection) || /\buseMemo\b/.test(selection)) {
+    cues.push('Memoization hooks point at caching by dependency: identity vs value, and when closures capture stale props.');
+  }
+  if (/\buseRef\b/.test(selection)) {
+    cues.push('useRef is a mutable cell across renders: pair it with timer IDs, latest callbacks, or imperative handles — not only "state without re-render".');
+  }
+  if (/\breturn\s+\([^)]*\)\s*=>|\b=>\s*\{[\s\S]{20,}/.test(selection) && cues.length === 0) {
+    cues.push('If the lesson is closure or higher-order flow, root lexical scope and functions as values — match the code, not an unrelated SQL or hooks template.');
+  }
+  if (!cues.length) return '';
+  return `\nPattern focus (follow the strongest signal in the selection — ignore unrelated templates):\n${cues.map((line) => `- ${line}`).join('\n')}\n`;
+}
+
 export type ExplainStyle = 'plain' | 'analogy' | 'foundations';
 
 const EXPLAIN_FEW_SHOT =
@@ -39,6 +82,12 @@ const DEEP_FOUNDATIONS_FEW_SHOT =
   'BOTTOM_LINE: Dependency injection makes the transport seam explicit.\n' +
   '### Test seam\nThe `fetch` option is where a test can substitute behaviour without changing client logic.\n' +
   '### Try it elsewhere\nPick a caller and list what you would inject to assert request shape.\n';
+
+/** Positive shape for timer/closure selections — two lines only. */
+const DEEP_FOUNDATIONS_TIMER_FEW_SHOT =
+  'Positive example when debounce, throttle, or effect cleanup appears:\n' +
+  'BOTTOM_LINE: Trailing-edge debounce coalesces bursts into one macrotask after the quiet window.\n' +
+  '### Mechanism\nEach input clears the prior timeout and schedules the next; the effect closure holds the latest value and timer id, and cleanup prevents a stale fire after unmount.\n';
 
 const DEEP_ANALOGY_FEW_SHOT =
   'Example format:\n' +
@@ -187,13 +236,20 @@ export function deepPrompt(ctx: CodeContext, kind: string, prior?: string): Chat
       `Give an everyday analogy in ONE domain only: ${analogyDomain(ctx.selection).name}. ` +
       `Start BOTTOM_LINE with the analogy, map two concrete roles to code, state one limit, and end with a transfer question.\n${DEEP_ANALOGY_FEW_SHOT}`,
     foundations:
-      'Teach one computer-science, design or testing fundamental visible in this code: define the principle, cite a concrete detail, ' +
-      'and give a small transfer exercise. Prefer test seams, dependency injection, or event-loop/async boundaries when mocks appear. ' +
-      'Take one step down when justified (Promise/event-loop scheduling, memory ownership, I/O) and add one inspectable experiment. ' +
+      'First name the dominant algorithmic pattern visible in this selection (pick what fits: event coalescing, trailing-edge or leading-edge debounce, ' +
+      'throttle sampling, macrotask scheduling via setTimeout/setInterval, requestAnimationFrame cadence, closure over mutable refs/cells). ' +
+      'Then teach one computer-science, design or testing fundamental: define it, cite a concrete line, and give a small transfer exercise. ' +
+      'Never paste the React 2018 Hooks story when the lesson is timing or composition. Prefer test seams or event-loop boundaries when mocks or timers appear. ' +
+      'Take one step down when justified (task queue order, stale closures, memory ownership, I/O) and add one inspectable experiment. ' +
       'Use plain math (2 × n), not LaTeX, when an algorithm justifies it.\n' +
-      DEEP_FOUNDATIONS_FEW_SHOT,
+      DEEP_FOUNDATIONS_FEW_SHOT +
+      (/\b(setTimeout|setInterval|requestAnimationFrame|debounc|throttl|useEffect)\b/i.test(ctx.selection)
+        ? `\n${DEEP_FOUNDATIONS_TIMER_FEW_SHOT}`
+        : ''),
     roots:
-      'Tell the historical origin of the key idea: a named person or year, the original problem, and one link to this selection.\n' +
+      'Tell the historical origin of the **primary algorithmic pattern** in this selection (debouncing, throttling, scheduling queues, closures, query operators, etc.). ' +
+      'A named custom hook is not automatically the React Hooks RFC — root debouncing in contact bounce, timers in the event loop, closures in lexical scope. ' +
+      'Name a person or year only when it fits that pattern. Never invent a framework keynote when the code is about timing or composition.\n' +
       'Example:\n' +
       'BOTTOM_LINE: SQL LIKE comes from early relational query languages standardising pattern predicates.\n' +
       '### Origin\nDonald Chamberlin and Raymond Boyce developed SQL precursors in the early 1970s.\n' +
@@ -206,16 +262,25 @@ export function deepPrompt(ctx: CodeContext, kind: string, prior?: string): Chat
     '### Benefit\nEach pass is easy to read and test in isolation.\n' +
     '### Cost\nTwo passes visit more characters; measure on long inputs before merging.\n' +
     '### When to choose\nPrefer clarity until profiling shows allocation cost matters.\n';
+  const performanceBrief =
+    'Explain a performance trade-off grounded in THIS code. Name the pacing pattern (debounce, throttle, timer, memo) if present. ' +
+    'Analyze explicitly:\n' +
+    '(1) What downstream work is coalesced or throttled (API calls, setState, DOM layout/paint, network, logging).\n' +
+    '(2) Allocation and identity overhead (new closures or IIFEs each render, effect re-subscription, dependency-array churn).\n' +
+    '(3) Cleanup and leak hazards (uncleared timeouts/intervals, stale closures firing after unmount, missing effect return).\n' +
+    'Then state benefit, cost, when to choose, and one measurement or experiment the engineer can run.\n' +
+    performanceFewShot;
   const brief =
     briefs[normalizedKind] ??
-    `Explain a trade-off grounded in THIS code: name the choice, a benefit, a cost, and when each side fits. Name a check the engineer can run.\n${performanceFewShot}`;
+    (normalizedKind === 'performance' ? performanceBrief : `Explain a trade-off grounded in THIS code: name the choice, a benefit, a cost, and when each side fits. Name a check the engineer can run.\n${performanceFewShot}`);
   const store = prior ? `\n${prior}\n` : '\n';
+  const patternCue = selectionDeepCue(ctx.selection);
   return [
     { role: 'system', content: BASE_RULES },
     {
       role: 'user',
       content:
-        `[INTENT:explain]\n${brief}${store}Reply in EXACTLY this format:\nBOTTOM_LINE: <one sentence>\n` +
+        `[INTENT:explain]\n${brief}${patternCue}${store}Reply in EXACTLY this format:\nBOTTOM_LINE: <one sentence>\n` +
         '### <title naming the actual thing>\n<at most 50 words>\n' +
         codeBlock(ctx),
     },
